@@ -1,0 +1,130 @@
+# Voice Project Tracker
+
+## Tool Guide
+
+| Tool | Role | Who acts |
+|------|------|----------|
+| **Cowork** | Generate files: Kotlin source, Gradle configs, Room schema, Compose layouts, project scaffolding | Claude generates, Dean drops into project |
+| **Claude Code** | Ongoing development on live codebase — multi-file edits, refactoring, debugging, Gradle builds, ADB commands | Claude Code acts on Dean's machine |
+| **Android Studio** | Run/deploy to Pixel 10 Pro XL, Compose Preview, Logcat, profiling | Dean operates |
+
+**Phase → Tool mapping:**
+- Phase 0 (Model Conversion) → Complete. Python/Terminal no longer needed going forward.
+- Phase 2.1 (Model Pivot) → Cowork for prototype snippets and validation
+- Phases 1–8 (Core build) → Cowork for initial generation → Claude Code for ongoing dev → Android Studio for testing
+
+**Stack pivot (decided 2026-06-19):**
+Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI APIs (Gemini Nano on-device via AICore):
+- STT → ML Kit GenAI Speech Recognition API, Advanced mode (Alpha) — Pixel 10 only, streams from mic
+- LLM cleanup/intent → ML Kit GenAI Prompt API (Beta) — single-turn prompts to Gemini Nano
+- Eliminates ~2.57 GB model asset bundle; models managed by Android OS via AICore
+- Runs fully offline after first-time setup; audio and prompts never leave the device
+- Full pivot rationale: `design/pivot20260619.md`
+
+---
+
+## Actions / In Progress
+
+---
+
+## Completed Phases
+
+**Phase 0: Model Conversion (Python)**
+- [x] Convert Whisper Small int8 to ONNX format
+- [x] Convert Phi-2 int4 to ONNX format
+- [x] Validate both models run locally in ORT 1.19.2
+- [x] ~~Push models to device via ADB~~ — superseded by pivot; no model push needed with ML Kit
+
+**Phase 1: Android Setup**
+- [x] Scaffold Android project (Kotlin, Gradle config, package structure)
+- [x] Add core dependencies (ONNX Runtime, Room, Compose, DataStore)
+- [x] ~~Model delivery via ADB push~~ — superseded by pivot; models live in AICore
+- [ ] **Update Gradle deps** — remove ONNX Runtime, add ML Kit GenAI (handled in Phase 2.1)
+
+**Phase 2: Audio & STT**
+- [x] Implement audio capture (AudioRecord API, 16kHz PCM) — carries forward to new stack
+- [x] Silence detection + auto-stop (2 sec threshold) — behavior with ML Kit STT to be validated in Phase 2.1
+- [x] ~~Whisper inference pipeline via ONNX Runtime~~ — superseded by pivot; archived in `python/`
+- [x] Transcription accuracy baseline established (1752ms on CPU; NNAPI tested at ~2500ms, reverted)
+
+---
+
+## To-Do
+
+**Phase 2.1: Model Improvement Pivot** ← current phase
+- [x] Verify AICore + Gemini Nano availability on Pixel 10 Pro XL (check bootloader lock status — unlocked bootloaders block AICore)
+- [x] Prototype ML Kit GenAI Speech Recognition (Advanced mode) — standalone Kotlin test, mic → transcript
+- [x] Validate silence detection behavior with ML Kit STT (confirm whether stopRecognition() call or manual threshold needed)
+- [ ] Prototype ML Kit GenAI Prompt API — send a cleanup prompt, verify response quality vs. Whisper/Phi-2 baseline
+- [ ] Validate intent classification quality via Prompt API (AI / Notes / Email / Text)
+- [ ] Confirm AICore feature status check + first-run model download flow (DOWNLOADABLE vs. AVAILABLE states)
+- [ ] Confirm model is pre-installed on Pixel 10 Pro XL or document first-run download size/time
+- [ ] Archive ONNX model files (do not delete — keep as fallback if pivot fails)
+- [x] Update Gradle deps: remove ONNX Runtime, add ML Kit GenAI Speech Recognition + Prompt API
+
+**Phase 3: LLM & Cleanup**
+- [ ] Integrate ML Kit GenAI Prompt API for text cleanup
+- [ ] Build intent-specific prompt templates (AI Prompt / Notes / Email / Text)
+- [ ] Implement in-context learning: retrieve training pairs from Room, inject as few-shot examples into prompt
+- [ ] Test cleanup quality per intent; tune prompts
+- [ ] Implement graceful degradation if AICore unavailable (surface error, do not silently fail)
+
+**Phase 4: Storage**
+- [ ] Room database setup (transcriptions, app_usage, training_pairs)
+- [ ] DataStore for encrypted settings
+- [ ] App frequency ranking logic (recency-weighted, last 30 days)
+
+**Phase 5: App Detection & Text Injection**
+- [ ] Auto-detect installed AI apps (Claude, ChatGPT, Perplexity)
+- [ ] Auto-detect installed comms apps (Slack, WhatsApp, Gmail, SMS)
+- [ ] Auto-detect PKB apps (Obsidian)
+- [ ] Accessibility Service text injection (primary)
+- [ ] Clipboard + notification fallback
+
+**Phase 6: UI**
+- [ ] FAB (draggable, always-on system overlay)
+- [ ] Intent selection bottom sheet (AI / Text / Email / Notes)
+- [ ] Listening state (waveform animation, red dot)
+- [ ] Processing state (spinner + label)
+- [ ] Target app menu (grouped by category, sorted by frequency)
+- [ ] Toast confirmations
+- [ ] AICore not-ready state (first-run model not yet downloaded — show loading indicator, not a crash)
+
+**Phase 7: Settings & Permissions**
+- [ ] Microphone permission request flow
+- [ ] Accessibility Service permission request flow
+- [ ] Clipboard permission (Android 13+)
+- [ ] Settings screen (language, auto-stop timer, feature toggles)
+- [ ] Data dashboard (storage used, export, delete history)
+- [ ] AICore dependency note in app (Pixel 10 required for Advanced STT; Basic mode fallback if scope expands)
+
+**Phase 8: Testing & Polish**
+- [ ] End-to-end test on Pixel 10 Pro XL
+- [ ] Test injection into Gmail, Slack, WhatsApp, Obsidian
+- [ ] Test clipboard fallback
+- [ ] Battery drain measurement (ML Kit / AICore vs. prior ONNX baseline)
+- [ ] Thermal testing (sustained dictation — AICore offloads to Tensor TPU, expect lower thermal than CPU inference)
+- [ ] Test AICore cold-start latency (first call after device restart)
+- [ ] Test AICore recovery after reset / AICore update (known setup edge case)
+- [ ] Error handling + graceful degradation (AICore unavailable, model not ready, feature status errors)
+
+---
+
+## Done
+<!-- Most recent first -->
+| Date | Item |
+|------|------|
+| 2026-06-19 | ML Kit GenAI STT validated on device — AICore available, streaming partials confirmed, noticeably faster than Whisper CPU baseline. Silence detection handled natively by the recognizer (CompletedResponse fires automatically). |
+| 2026-06-19 | Gradle pivot complete — removed ONNX Runtime, added ML Kit GenAI Speech Recognition; removed MANAGE_EXTERNAL_STORAGE + largeHeap from manifest. |
+| 2026-06-19 | Created `audio/SttProbe.kt` — standalone ML Kit GenAI Speech Recognition probe (checkAvailability + transcribe Flow). Verify import paths against ML Kit release notes before first build. |
+| 2026-06-19 | Verified AICore availability — bootloader locked (green), `com.google.android.aicore` present, Android 16. Gemini Nano feature state (AVAILABLE vs DOWNLOADABLE) to be confirmed at runtime in Phase 2.1 prototype. |
+| 2026-06-19 | Removed ONNX model files from device (`/sdcard/Android/data/dev.dean.voice/files/models/`) — ~2.57 GB freed. Local copies archived in `python/` as fallback. |
+| 2026-06-19 | Stack pivot decided — replaced ONNX Runtime + Whisper + Phi-2 with ML Kit GenAI APIs (Gemini Nano via AICore). See `design/pivot20260619.md`. |
+| 2026-06-19 | Transcription accuracy baseline — "This is a transcription test" transcribed correctly at 1752ms on CPU (NNAPI tested, slower ~2500ms, reverted). Whisper ONNX pipeline superseded by pivot. |
+| 2026-06-18 | Phase 2: Whisper inference pipeline — WhisperFeatureExtractor (mel spectrogram), WhisperTokenizer (BPE decode), WhisperInference (ORT encoder + greedy decoder). Archived in `python/`. |
+| 2026-06-18 | Phase 2: AudioRecorder implemented — Flow-based 16kHz PCM capture, RMS silence detection (2 sec), 60 sec max cap. Carries forward to new stack. |
+| 2026-06-18 | Phase 1 scaffold complete — `android/` project with Gradle, manifest, all Kotlin stubs, ADB push script. Gradle deps need update per Phase 2.1. |
+| 2026-06-18 | Converted Whisper Small to int8 ONNX (encoder 93.6 MB, decoder 300.5 MB). Archived in `python/whisper_small_int8/`. |
+| 2026-06-18 | Converted Phi-2 to int4 ONNX (phi2_int4.onnx + phi2_int4.onnx_data, ~2.18 GB). Archived in `python/phi2_int4/`. |
+| 2026-06-18 | Validated both ONNX models load and run forward pass in ORT 1.19.2. |
+| 2026-06-18 | Created project folder structure (`design/`, `android/`, `python/`). |

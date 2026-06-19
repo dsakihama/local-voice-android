@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Local Voice</string>
+    <string name="accessibility_service_label">Local Voice Text Injection</string>
+    <string name="accessibility_service_description">
+        Injects cleaned speech transcription into the focused text field of your chosen app.
+        No data leaves your device.
+    </string>
+</resources>

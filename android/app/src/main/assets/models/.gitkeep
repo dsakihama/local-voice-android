@@ -1,0 +1,11 @@
+# Model files go here — pushed via ADB, NOT committed to git.
+# See scripts/push_models.sh for the push procedure.
+#
+# Expected layout:
+#   models/
+#     whisper_small_int8/
+#       encoder_model_int8.onnx   (~93.6 MB)
+#       decoder_model_int8.onnx   (~300.5 MB)
+#     phi2_int4/
+#       phi2_int4.onnx            (~tiny skeleton)
+#       phi2_int4.onnx.data       (~2.18 GB weights)

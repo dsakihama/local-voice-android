@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find ~/Library/Java ~/Applications /Applications -name \"jar\" 2>/dev/null | head -5)",
+      "Bash(\"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/jar\" tf ~/.gradle/caches/8.9/transforms/9414cd0b3c8dd3ac304fe73c72b83663/transformed/jetified-genai-speech-recognition-1.0.0-alpha1-api.jar)",
+      "Bash(grep \"\\\\.class$\")",
+      "Bash(grep -v \"\\\\$\")",
+      "Read(//Users/deansakihama/.gradle/caches/8.9/transforms/9414cd0b3c8dd3ac304fe73c72b83663/transformed/**)",
+      "Bash(\"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javap\" -p \"jetified-genai-speech-recognition-1.0.0-alpha1-api.jar\")",
+      "Bash('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/jar' xf jetified-genai-speech-recognition-1.0.0-alpha1-api.jar 'com/google/mlkit/genai/speechrecognition/SpeechRecognizerResponse$PartialTextResponse.class' 'com/google/mlkit/genai/speechrecognition/SpeechRecognizerResponse$ErrorResponse.class' 'com/google/mlkit/genai/speechrecognition/SpeechRecognizerResponse$FinalTextResponse.class')",
+      "Bash('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javap' -p 'com/google/mlkit/genai/speechrecognition/SpeechRecognizerResponse$PartialTextResponse.class' 'com/google/mlkit/genai/speechrecognition/SpeechRecognizerResponse$ErrorResponse.class' 'com/google/mlkit/genai/speechrecognition/SpeechRecognizerResponse$FinalTextResponse.class')"
+    ]
+  }
+}

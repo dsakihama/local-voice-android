@@ -1,0 +1,37 @@
+# ── Android build outputs ────────────────────────────────────────────
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/*.iml
+
+# ── Android Studio / IntelliJ ────────────────────────────────────────
+.idea/
+*.iml
+.DS_Store
+
+# ── Gradle wrapper (keep gradlew + wrapper jar, ignore caches) ───────
+!android/gradle/wrapper/gradle-wrapper.jar
+!android/gradle/wrapper/gradle-wrapper.properties
+!android/gradlew
+!android/gradlew.bat
+
+# ── ONNX model files — too large for git (archived in python/) ───────
+*.onnx
+*.onnx.data
+
+# ── Python env / cache ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── macOS ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Secrets / keys ───────────────────────────────────────────────────
+*.keystore
+*.jks
+google-services.json

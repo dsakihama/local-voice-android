@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Main app theme (dark, Material 3) -->
+    <style name="Theme.LocalVoice" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Colors wired in via Compose Theme.kt — leave XML minimal -->
+    </style>
+
+    <!-- Transparent activity theme for the overlay FAB activity -->
+    <style name="Theme.LocalVoice.Transparent" parent="Theme.LocalVoice">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>
