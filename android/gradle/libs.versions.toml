@@ -13,6 +13,8 @@ navigationCompose = "2.8.4"
 material = "1.12.0"
 # ML Kit GenAI — verify version against https://developers.google.com/ml-kit/release-notes before each dev session (Alpha = no deprecation SLA)
 mlkitGenaiSpeech = "1.0.0-alpha1"
+# MediaPipe — verify version against https://maven.google.com before each dev session
+mediapipeTasks = "0.10.35"
 
 [libraries]
 # AndroidX
@@ -41,6 +43,8 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 
 # ML Kit GenAI Speech Recognition — Advanced mode (Alpha), Pixel 10 + AICore only
 mlkit-genai-speech = { group = "com.google.mlkit", name = "genai-speech-recognition", version.ref = "mlkitGenaiSpeech" }
+# MediaPipe LLM Inference — on-device text generation (Gemma 3 1B GGUF)
+mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeTasks" }
 
 # Material Components (provides Theme.Material3.* XML themes)
 google-material = { group = "com.google.android.material", name = "material", version.ref = "material" }

@@ -13,69 +13,61 @@ package dev.dean.voice.intent
 object CleanupPrompts {
 
     /**
-     * Build a complete prompt for the given intent and raw transcript.
+     * Returns the two parts the Prompt API expects:
+     *   - [first]  = system/prefix instructions (maps to PromptPrefix)
+     *   - [second] = user content to transform (maps to TextPart)
      *
-     * @param intent       The selected VoiceIntent.
-     * @param rawText      Raw STT output from Whisper.
-     * @param examples     Recent (raw → cleaned) training pairs, most-recent first.
-     *                     Injected as few-shot examples. Max ~10 pairs.
+     * Keeping them separate lets the caller set PromptPrefix explicitly so AICore
+     * can cache/optimise the system instructions across requests.
      */
+    fun buildParts(
+        intent: VoiceIntent,
+        rawText: String,
+        examples: List<Pair<String, String>> = emptyList(),
+    ): Pair<String, String> {
+        val exampleBlock = buildExampleBlock(examples)
+        val prefix = buildString {
+            appendLine(systemPromptFor(intent))
+            if (exampleBlock.isNotBlank()) {
+                appendLine()
+                appendLine("EXAMPLES OF YOUR PREVIOUS CLEANUPS:")
+                append(exampleBlock)
+            }
+        }.trimEnd()
+
+        val userContent = "Input:\n$rawText\n\nOutput (no introduction, no explanation):"
+        return prefix to userContent
+    }
+
+    /** Convenience flat-string builder kept for tests / debugging. */
     fun build(
         intent: VoiceIntent,
         rawText: String,
         examples: List<Pair<String, String>> = emptyList(),
     ): String {
-        val systemPrompt = systemPromptFor(intent)
-        val exampleBlock = buildExampleBlock(examples)
-        return buildString {
-            appendLine(systemPrompt)
-            if (exampleBlock.isNotBlank()) {
-                appendLine()
-                appendLine("EXAMPLES OF YOUR PREVIOUS CLEANUPS:")
-                appendLine(exampleBlock)
-            }
-            appendLine()
-            appendLine("Clean this speech-to-text:")
-            appendLine(rawText)
-            appendLine()
-            appendLine("Output: Only the cleaned text, nothing else.")
-        }
+        val (prefix, user) = buildParts(intent, rawText, examples)
+        return "$prefix\n\n$user"
     }
 
     private fun systemPromptFor(intent: VoiceIntent): String = when (intent) {
         VoiceIntent.AI_PROMPT -> """
-            You are an AI prompt cleanup specialist. The user is sending instructions to an AI model.
-            Make the prompt:
-            - Clear and specific (remove filler words: umm, like, you know, uh)
-            - Well-structured (use numbered steps if complex, markdown if needed)
-            - Include necessary context and constraints
-            - Preserve technical terms and jargon
-            - Add formatting for readability (markdown, bullet points)
+            Fix grammar and punctuation in the input text. Remove obvious filler words (umm, uh, um) but preserve natural phrasing.
+            Do not add any information not in the input. Do not explain. Output only the corrected text.
         """.trimIndent()
 
         VoiceIntent.TEXT -> """
-            You are a casual messaging cleanup specialist.
-            Keep the conversational tone. Fix typos and grammar.
-            Remove filler words (umm, like, uh) but keep it sounding natural.
-            Keep it short and punchy.
-            Emoji-friendly: add emojis if they fit the vibe.
+            Fix grammar and punctuation in the input text. Remove filler words (umm, uh, like).
+            Do not add any information not in the input. Do not explain. Output only the corrected text.
         """.trimIndent()
 
         VoiceIntent.EMAIL -> """
-            You are a professional email cleanup specialist.
-            Tone: polite, clear, direct.
-            Structure: greeting → request/content → close.
-            Remove filler words completely.
-            Fix grammar strictly.
-            Add appropriate punctuation and capitalization.
+            Fix grammar and punctuation in the input text. Remove filler words (umm, uh, like).
+            Do not add any information not in the input. Do not explain. Output only the corrected text.
         """.trimIndent()
 
         VoiceIntent.NOTES -> """
-            You are a note-taking cleanup specialist.
-            Format as readable notes with clear structure.
-            Use bullet points for lists.
-            Preserve technical terms and jargon.
-            Be concise and scannable.
+            Fix grammar and punctuation in the input text. Remove filler words (umm, uh, like).
+            Do not add any information not in the input. Do not explain. Output only the corrected text.
         """.trimIndent()
     }
 

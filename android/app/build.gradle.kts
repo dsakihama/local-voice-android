@@ -97,6 +97,8 @@ dependencies {
 
     // ML Kit GenAI Speech Recognition — Advanced mode (Gemini Nano via AICore)
     implementation(libs.mlkit.genai.speech)
+    // MediaPipe LLM Inference — on-device text cleanup via Gemma 3 1B (GGUF)
+    implementation(libs.mediapipe.tasks.genai)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

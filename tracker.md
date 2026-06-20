@@ -14,11 +14,11 @@
 - Phases 1–8 (Core build) → Cowork for initial generation → Claude Code for ongoing dev → Android Studio for testing
 
 **Stack pivot (decided 2026-06-19):**
-Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI APIs (Gemini Nano on-device via AICore):
-- STT → ML Kit GenAI Speech Recognition API, Advanced mode (Alpha) — Pixel 10 only, streams from mic
-- LLM cleanup/intent → ML Kit GenAI Prompt API (Beta) — single-turn prompts to Gemini Nano
-- Eliminates ~2.57 GB model asset bundle; models managed by Android OS via AICore
-- Runs fully offline after first-time setup; audio and prompts never leave the device
+Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + MediaPipe LLM Inference:
+- STT → ML Kit GenAI Speech Recognition API, Advanced mode (Alpha) — Pixel 10 only, streams from mic via AICore
+- LLM cleanup → MediaPipe LLM Inference (`tasks-genai:0.10.35`) + Gemma 3 1B int4 (`gemma3-1B-it-int4.task`) — bypasses AICore, ~1100ms cleanup latency
+- ML Kit Prompt API was blocked — `generateContent()` never returns on ASI build `B.25.playstore.pixel10.919165660`
+- Runs fully offline; audio and prompts never leave the device
 - Full pivot rationale: `design/pivot20260619.md`
 
 ---
@@ -51,23 +51,29 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI APIs (
 
 ## To-Do
 
-**Phase 2.1: Model Improvement Pivot** ← current phase
-- [x] Verify AICore + Gemini Nano availability on Pixel 10 Pro XL (check bootloader lock status — unlocked bootloaders block AICore)
-- [x] Prototype ML Kit GenAI Speech Recognition (Advanced mode) — standalone Kotlin test, mic → transcript
-- [x] Validate silence detection behavior with ML Kit STT (confirm whether stopRecognition() call or manual threshold needed)
-- [ ] Prototype ML Kit GenAI Prompt API — send a cleanup prompt, verify response quality vs. Whisper/Phi-2 baseline
-- [ ] Validate intent classification quality via Prompt API (AI / Notes / Email / Text)
-- [ ] Confirm AICore feature status check + first-run model download flow (DOWNLOADABLE vs. AVAILABLE states)
-- [ ] Confirm model is pre-installed on Pixel 10 Pro XL or document first-run download size/time
-- [ ] Archive ONNX model files (do not delete — keep as fallback if pivot fails)
-- [x] Update Gradle deps: remove ONNX Runtime, add ML Kit GenAI Speech Recognition + Prompt API
+**Phase 2.1: Model Improvement Pivot** ✓ Complete
+- [x] Verify AICore + Gemini Nano availability on Pixel 10 Pro XL
+- [x] Prototype ML Kit GenAI Speech Recognition (Advanced mode) — mic → transcript validated
+- [x] Validate silence detection behavior with ML Kit STT
+- [x] ~~Prototype ML Kit GenAI Prompt API~~ — blocked; `generateContent()` never returns on this AICore build
+- [x] Update Gradle deps: remove ONNX Runtime, add ML Kit GenAI Speech Recognition
+- [x] Archive ONNX model files (kept in `python/` as fallback)
 
-**Phase 3: LLM & Cleanup**
-- [ ] Integrate ML Kit GenAI Prompt API for text cleanup
-- [ ] Build intent-specific prompt templates (AI Prompt / Notes / Email / Text)
+**Phase 2.2: MediaPipe LLM Cleanup** ✓ Complete
+- [x] Replace ML Kit Prompt API with MediaPipe LLM Inference (`tasks-genai:0.10.35`)
+- [x] Implement `MediaPipeLlmCleanup.kt` — wraps `LlmInference`, logs RAW/CLEANED/latency
+- [x] Build intent-specific prompt templates (`CleanupPrompts.kt`)
+- [x] **Model: Gemma 3 1B GGUF** (`gemma-3-1b-it-Q4_K_M.gguf`) — rejected; MediaPipe does not accept GGUF format ("not a valid Flatbuffer buffer")
+- [x] **Model: Gemma 3 270M int8** (`gemma-3-270m-it-int8.task`) — rejected; repetition loops on simple inputs, too small for reliable instruction following
+- [x] **Model: Gemma 3 1B int4** (`gemma3-1B-it-int4.task`) — selected; ~1100ms cleanup latency, no repetition, acceptable output quality
+- [ ] **Commit all phase 2.2 changes** (6 modified files + `MediaPipeLlmCleanup.kt`)
+
+**Phase 3: LLM & Cleanup Refinement** ← current phase
+- [ ] Prompt refinement loop — use a model-assisted session to iteratively tune `CleanupPrompts.kt` based on real transcription samples across all four intents (AI / Notes / Email / Text)
 - [ ] Implement in-context learning: retrieve training pairs from Room, inject as few-shot examples into prompt
-- [ ] Test cleanup quality per intent; tune prompts
-- [ ] Implement graceful degradation if AICore unavailable (surface error, do not silently fail)
+- [ ] Implement graceful degradation if model file missing (surface clear error, do not silently fail)
+- [ ] Evaluate CPU vs GPU backend latency (set `setPreferredBackend` in `LlmInferenceOptions`)
+- [ ] In-app model download flow (replace ADB push with bundled or downloadable model)
 
 **Phase 4: Storage**
 - [ ] Room database setup (transcriptions, app_usage, training_pairs)
@@ -114,6 +120,8 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI APIs (
 <!-- Most recent first -->
 | Date | Item |
 |------|------|
+| 2026-06-20 | MediaPipe LLM Inference + Gemma 3 1B int4 validated on device — cleanup working across all intents, ~1100ms latency. Prompt tuning in progress. |
+| 2026-06-20 | ML Kit Prompt API confirmed blocked on ASI build `B.25.playstore.pixel10.919165660` — pivoted to MediaPipe which bundles its own inference engine and bypasses AICore. |
 | 2026-06-19 | ML Kit GenAI STT validated on device — AICore available, streaming partials confirmed, noticeably faster than Whisper CPU baseline. Silence detection handled natively by the recognizer (CompletedResponse fires automatically). |
 | 2026-06-19 | Gradle pivot complete — removed ONNX Runtime, added ML Kit GenAI Speech Recognition; removed MANAGE_EXTERNAL_STORAGE + largeHeap from manifest. |
 | 2026-06-19 | Created `audio/SttProbe.kt` — standalone ML Kit GenAI Speech Recognition probe (checkAvailability + transcribe Flow). Verify import paths against ML Kit release notes before first build. |

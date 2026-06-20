@@ -16,9 +16,14 @@ android/*.iml
 !android/gradlew
 !android/gradlew.bat
 
-# ── ONNX model files — too large for git (archived in python/) ───────
+# ── Model files — too large for git ─────────────────────────────────
 *.onnx
 *.onnx.data
+*.gguf
+*.task
+*.litertlm
+*.tflite
+*.tar.gz
 
 # ── Python env / cache ───────────────────────────────────────────────
 __pycache__/
