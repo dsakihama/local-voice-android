@@ -50,24 +50,14 @@ object CleanupPrompts {
     }
 
     private fun systemPromptFor(intent: VoiceIntent): String = when (intent) {
-        VoiceIntent.AI_PROMPT -> """
-            Fix grammar and punctuation in the input text. Remove obvious filler words (umm, uh, um) but preserve natural phrasing.
-            Do not add any information not in the input. Do not explain. Output only the corrected text.
-        """.trimIndent()
-
-        VoiceIntent.TEXT -> """
-            Fix grammar and punctuation in the input text. Remove filler words (umm, uh, like).
-            Do not add any information not in the input. Do not explain. Output only the corrected text.
-        """.trimIndent()
-
-        VoiceIntent.EMAIL -> """
-            Fix grammar and punctuation in the input text. Remove filler words (umm, uh, like).
-            Do not add any information not in the input. Do not explain. Output only the corrected text.
-        """.trimIndent()
-
+        VoiceIntent.AI_PROMPT,
+        VoiceIntent.TEXT,
+        VoiceIntent.EMAIL,
         VoiceIntent.NOTES -> """
-            Fix grammar and punctuation in the input text. Remove filler words (umm, uh, like).
-            Do not add any information not in the input. Do not explain. Output only the corrected text.
+            Add punctuation marks (. , ! ?) and capitalize the first word of each sentence only.
+            Remove obvious filler words (umm, uh, um) only.
+            Do not change, move, add, or remove any other words.
+            Do not explain. Output only the corrected text.
         """.trimIndent()
     }
 
