@@ -1,19 +1,28 @@
 package dev.dean.voice.ui
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.mlkit.genai.common.FeatureStatus
 import dev.dean.voice.VoiceApp
+import dev.dean.voice.apps.TargetAppRegistry
 import dev.dean.voice.audio.SttProbe
+import dev.dean.voice.data.db.entities.AppUsageRecord
 import dev.dean.voice.data.db.entities.Transcription
 import dev.dean.voice.intent.VoiceIntent
 import dev.dean.voice.model.MediaPipeLlmCleanup
+import dev.dean.voice.service.VoiceAccessibilityService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -36,6 +45,16 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             val latencyMs: Long,
             val intent: VoiceIntent,
         ) : UiState
+        /** Cleanup done; user is choosing a target app. */
+        data class SelectTarget(
+            val cleanedText: String,
+            val intent: VoiceIntent,
+            val rankedApps: Map<TargetAppRegistry.Category, List<TargetAppRegistry.TargetApp>>,
+        ) : UiState
+        /** Text was injected directly into the target app via accessibility. */
+        data class Delivered(val appName: String) : UiState
+        /** Injection failed or service unavailable — text is in clipboard. */
+        data class ClipboardFallback(val appName: String) : UiState
         data class Error(val message: String) : UiState
     }
 
@@ -133,13 +152,8 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     when (val result = cleanup.clean(selectedIntent, rawText)) {
                         is MediaPipeLlmCleanup.Result.Success -> {
-                            _state.value = UiState.Result(
-                                rawText = result.rawText,
-                                cleanedText = result.cleanedText,
-                                latencyMs = result.latencyMs,
-                                intent = selectedIntent,
-                            )
                             persistTranscription(result.rawText, result.cleanedText, selectedIntent, result.latencyMs)
+                            _state.value = buildSelectTarget(result.cleanedText, selectedIntent)
                         }
                         is MediaPipeLlmCleanup.Result.Error -> _state.value = UiState.Error(
                             "Cleanup failed: ${result.message}\n\nRaw STT: $rawText"
@@ -149,13 +163,8 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
                     val t0 = System.currentTimeMillis()
                     val cleaned = programmaticClean(rawText)
                     val latency = System.currentTimeMillis() - t0
-                    _state.value = UiState.Result(
-                        rawText = rawText,
-                        cleanedText = cleaned,
-                        latencyMs = latency,
-                        intent = selectedIntent,
-                    )
                     persistTranscription(rawText, cleaned, selectedIntent, latency)
+                    _state.value = buildSelectTarget(cleaned, selectedIntent)
                 }
             } catch (e: Exception) {
                 _state.value = UiState.Error("Cleanup error: ${e.message}\n\nRaw STT: $rawText")
@@ -179,6 +188,75 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             }.onFailure {
                 android.util.Log.e("VoiceRepository", "Failed to save transcription", it)
             }
+        }
+    }
+
+    private suspend fun buildSelectTarget(cleanedText: String, intent: VoiceIntent): UiState.SelectTarget =
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val thirtyDaysAgo = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30)
+        val ranked = repository.getRankedApps(intent.name, thirtyDaysAgo)
+        val rankedIds = ranked.map { it.targetAppId }.toSet()
+
+        val installed = TargetAppRegistry.getInstalledApps(getApplication())
+
+        // Rebuild the map: ranked apps first (in frequency order), then unranked installed apps
+        val sorted = installed.mapValues { (_, apps) ->
+            val inRank = apps.filter { it.id in rankedIds }
+                .sortedByDescending { app -> ranked.first { it.targetAppId == app.id }.useCount }
+            val unranked = apps.filter { it.id !in rankedIds }
+            inRank + unranked
+        }
+
+        UiState.SelectTarget(cleanedText, intent, sorted)
+    }
+
+    fun deliverTo(app: TargetAppRegistry.TargetApp) {
+        val currentState = _state.value as? UiState.SelectTarget ?: return
+        val text = currentState.cleanedText
+        val intent = currentState.intent
+        val context: Context = getApplication()
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val service = VoiceAccessibilityService.instance.value
+            val injected = service?.injectText(text) ?: false
+
+            val accepted = injected  // if injection succeeded, count as accepted
+            repository.saveAppUsage(
+                AppUsageRecord(
+                    targetAppId = app.id,
+                    targetAppName = app.displayName,
+                    intent = intent.name,
+                    userAccepted = accepted,
+                )
+            )
+
+            if (!injected) {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("voice", text))
+            }
+
+            _state.value = if (injected) UiState.Delivered(app.displayName)
+                           else UiState.ClipboardFallback(app.displayName)
+
+            // Launch the target app on the main thread after state update
+            launch(Dispatchers.Main) {
+                launchApp(context, app)
+            }
+        }
+    }
+
+    private fun launchApp(context: Context, app: TargetAppRegistry.TargetApp) {
+        val launchIntent: Intent? = if (app.webFallbackUrl != null) {
+            // Web-only apps — open in Chrome specifically
+            context.packageManager.getLaunchIntentForPackage("com.android.chrome")
+                ?.apply { data = Uri.parse(app.webFallbackUrl) }
+                ?: Intent(Intent.ACTION_VIEW, Uri.parse(app.webFallbackUrl))
+        } else {
+            context.packageManager.getLaunchIntentForPackage(app.id)
+        }
+        launchIntent?.let {
+            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(it)
         }
     }
 

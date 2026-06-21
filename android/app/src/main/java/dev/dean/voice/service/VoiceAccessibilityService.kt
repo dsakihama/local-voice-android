@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Accessibility Service for injecting cleaned transcription text into target apps.
@@ -11,30 +13,49 @@ import android.view.accessibility.AccessibilityNodeInfo
  * Strategy:
  *   1. Find the focused input field in the active window.
  *   2. Use ACTION_SET_TEXT to inject the cleaned text directly.
- *   3. If injection fails, fall back to clipboard + notification (VoiceClipboardFallback).
+ *   3. If injection fails, caller is responsible for clipboard fallback.
  *
- * Declared in AndroidManifest.xml with the accessibility_service_config.xml meta-data.
- *
- * Phase 5 implementation: wire up the full injection + fallback flow.
- *
- * TODO Phase 5: implement injectText(), onAccessibilityEvent(), fallback.
+ * Also tracks the foreground app package via [foregroundPackage] so the ViewModel
+ * can record which app received the text.
  */
 class VoiceAccessibilityService : AccessibilityService() {
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // TODO Phase 5: track window state for app detection
+    companion object {
+        private val _instance = MutableStateFlow<VoiceAccessibilityService?>(null)
+
+        /** Live reference to the running service, or null if not enabled. */
+        val instance: StateFlow<VoiceAccessibilityService?> = _instance
+
+        private val _foregroundPackage = MutableStateFlow<String?>(null)
+
+        /** Package name of the currently foregrounded app. Updated on every window change. */
+        val foregroundPackage: StateFlow<String?> = _foregroundPackage
     }
 
-    override fun onInterrupt() {
-        // Service was interrupted — no-op for now
+    override fun onServiceConnected() {
+        _instance.value = this
+    }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            event.packageName?.toString()?.let { pkg ->
+                // Ignore our own app switching to foreground during delivery
+                if (pkg != packageName) _foregroundPackage.value = pkg
+            }
+        }
+    }
+
+    override fun onInterrupt() = Unit
+
+    override fun onDestroy() {
+        _instance.value = null
+        super.onDestroy()
     }
 
     /**
      * Inject [text] into the currently focused input field.
      *
      * @return true if injection succeeded; false if fallback is needed.
-     *
-     * TODO Phase 5: implement
      */
     fun injectText(text: String): Boolean {
         val focusedNode: AccessibilityNodeInfo =
