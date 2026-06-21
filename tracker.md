@@ -66,19 +66,24 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 - [x] **Model: Gemma 3 1B GGUF** (`gemma-3-1b-it-Q4_K_M.gguf`) — rejected; MediaPipe does not accept GGUF format ("not a valid Flatbuffer buffer")
 - [x] **Model: Gemma 3 270M int8** (`gemma-3-270m-it-int8.task`) — rejected; repetition loops on simple inputs, too small for reliable instruction following
 - [x] **Model: Gemma 3 1B int4** (`gemma3-1B-it-int4.task`) — selected; ~1100ms cleanup latency, no repetition, acceptable output quality
-- [ ] **Commit all phase 2.2 changes** (6 modified files + `MediaPipeLlmCleanup.kt`)
+- [x] **Commit all phase 2.2 changes** (6 modified files + `MediaPipeLlmCleanup.kt`)
 
-**Phase 3: LLM & Cleanup Refinement** ← current phase
-- [ ] Prompt refinement loop — use a model-assisted session to iteratively tune `CleanupPrompts.kt` based on real transcription samples across all four intents (AI / Notes / Email / Text)
+**Phase 3: LLM & Cleanup Refinement** ⏸ Deferred — blocked on model availability
+- Text / Email / Notes now use fast programmatic cleanup (capitalize + strip fillers); LLM reserved for AI Prompt only
+- Unblocked by: Gemma 3 4B LiteRT release on Kaggle (not yet available as of 2026-06-20)
+- [ ] Prompt refinement loop — tune `CleanupPrompts.kt` across all intents once 4B model is available
 - [ ] Implement in-context learning: retrieve training pairs from Room, inject as few-shot examples into prompt
 - [ ] Implement graceful degradation if model file missing (surface clear error, do not silently fail)
 - [ ] Evaluate CPU vs GPU backend latency (set `setPreferredBackend` in `LlmInferenceOptions`)
 - [ ] In-app model download flow (replace ADB push with bundled or downloadable model)
+- [ ] Migrate off deprecated `LlmInference` API — `tasks-genai:0.10.35` marks it deprecated; check newer MediaPipe release for replacement API before bumping version
 
-**Phase 4: Storage**
-- [ ] Room database setup (transcriptions, app_usage, training_pairs)
-- [ ] DataStore for encrypted settings
-- [ ] App frequency ranking logic (recency-weighted, last 30 days)
+**Phase 4: Storage** ✓ Complete
+- [x] Room database setup (transcriptions, app_usage, training_pairs) — entities, DAOs, VoiceDatabase all scaffolded
+- [x] DataStore settings repository — AppSettingsRepository wired (standard DataStore, not encrypted)
+- [x] VoiceRepository created — wraps all 3 DAOs; exposed from VoiceApp
+- [x] Transcription saved to DB after every completed session (both LLM and programmatic paths)
+- [ ] App frequency ranking logic (recency-weighted, last 30 days) — deferred to Phase 5 where it's consumed
 
 **Phase 5: App Detection & Text Injection**
 - [ ] Auto-detect installed AI apps (Claude, ChatGPT, Perplexity)
@@ -103,6 +108,9 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 - [ ] Settings screen (language, auto-stop timer, feature toggles)
 - [ ] Data dashboard (storage used, export, delete history)
 - [ ] AICore dependency note in app (Pixel 10 required for Advanced STT; Basic mode fallback if scope expands)
+
+**Future Investigations (post-Phase 8)**
+- [ ] Evaluate Gemma 3 4B int4 (`.task` format, Kaggle) if 1B quality is insufficient after prompt tuning — ~2.5 GB, expect 5–15s inference vs ~1100ms; try GPU variant first (Tensor G4 via OpenCL/Vulkan)
 
 **Phase 8: Testing & Polish**
 - [ ] End-to-end test on Pixel 10 Pro XL

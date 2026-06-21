@@ -4,9 +4,12 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.mlkit.genai.common.FeatureStatus
+import dev.dean.voice.VoiceApp
 import dev.dean.voice.audio.SttProbe
+import dev.dean.voice.data.db.entities.Transcription
 import dev.dean.voice.intent.VoiceIntent
 import dev.dean.voice.model.MediaPipeLlmCleanup
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +19,7 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val probe = SttProbe(app)
     private val cleanup = MediaPipeLlmCleanup(app)
+    private val repository = (app as VoiceApp).repository
 
     sealed interface UiState {
         data object Idle : UiState
@@ -42,6 +46,8 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
     val intent: StateFlow<VoiceIntent> = _intent
 
     private var recordJob: Job? = null
+    private val finalSegments = mutableListOf<String>()
+    private var lastPartial: String = ""
 
     fun setIntent(intent: VoiceIntent) {
         _intent.value = intent
@@ -53,6 +59,8 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startRecording() {
+        finalSegments.clear()
+        lastPartial = ""
         recordJob = viewModelScope.launch {
             _state.value = UiState.CheckingAvailability
             try {
@@ -84,9 +92,23 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             is SttProbe.Event.DownloadProgress -> _state.value = UiState.Downloading
             is SttProbe.Event.DownloadComplete -> _state.value = UiState.CheckingAvailability
             is SttProbe.Event.Listening        -> _state.value = UiState.Recording
-            is SttProbe.Event.Partial          -> _state.value = UiState.Partial(event.text)
-            is SttProbe.Event.Final            -> runCleanup(event.text)
-            is SttProbe.Event.Complete         -> Unit  // hold last state
+            is SttProbe.Event.Partial          -> {
+                lastPartial = event.text
+                val accumulated = (finalSegments + event.text).joinToString(" ")
+                _state.value = UiState.Partial(accumulated)
+            }
+            is SttProbe.Event.Final            -> {
+                if (finalSegments.lastOrNull() != event.text) {
+                    finalSegments.add(event.text)
+                }
+                lastPartial = ""
+                val accumulated = finalSegments.joinToString(" ")
+                _state.value = UiState.Partial(accumulated)
+            }
+            is SttProbe.Event.Complete         -> {
+                val fullText = finalSegments.joinToString(" ")
+                if (fullText.isNotBlank()) runCleanup(fullText)
+            }
             is SttProbe.Event.Unavailable      -> _state.value =
                 UiState.Error("AICore unavailable (status=${event.status})")
             is SttProbe.Event.Err              -> _state.value = UiState.Error(event.message)
@@ -97,28 +119,43 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
         val selectedIntent = _intent.value
         viewModelScope.launch {
             try {
-                if (!cleanup.isModelReady()) {
-                    _state.value = UiState.Error(
-                        "Gemma 3 model not found.\n" +
-                        "adb push gemma-3-1b-it-Q4_K_M.gguf /data/local/tmp/gemma-3-1b-it-Q4_K_M.gguf\n" +
-                        "adb shell run-as dev.dean.voice cp /data/local/tmp/gemma-3-1b-it-Q4_K_M.gguf /data/data/dev.dean.voice/files/gemma-3-1b-it-Q4_K_M.gguf\n\n" +
-                        "Raw STT: $rawText"
-                    )
-                    return@launch
-                }
-
                 _state.value = UiState.Cleaning(rawText)
 
-                when (val result = cleanup.clean(selectedIntent, rawText)) {
-                    is MediaPipeLlmCleanup.Result.Success -> _state.value = UiState.Result(
-                        rawText = result.rawText,
-                        cleanedText = result.cleanedText,
-                        latencyMs = result.latencyMs,
+                if (selectedIntent == VoiceIntent.AI_PROMPT) {
+                    if (!cleanup.isModelReady()) {
+                        _state.value = UiState.Error(
+                            "Gemma 3 model not found.\n" +
+                            "adb push gemma3-1B-it-int4.task /data/local/tmp/gemma3-1B-it-int4.task\n" +
+                            "adb shell run-as dev.dean.voice cp /data/local/tmp/gemma3-1B-it-int4.task /data/data/dev.dean.voice/files/gemma3-1B-it-int4.task\n\n" +
+                            "Raw STT: $rawText"
+                        )
+                        return@launch
+                    }
+                    when (val result = cleanup.clean(selectedIntent, rawText)) {
+                        is MediaPipeLlmCleanup.Result.Success -> {
+                            _state.value = UiState.Result(
+                                rawText = result.rawText,
+                                cleanedText = result.cleanedText,
+                                latencyMs = result.latencyMs,
+                                intent = selectedIntent,
+                            )
+                            persistTranscription(result.rawText, result.cleanedText, selectedIntent, result.latencyMs)
+                        }
+                        is MediaPipeLlmCleanup.Result.Error -> _state.value = UiState.Error(
+                            "Cleanup failed: ${result.message}\n\nRaw STT: $rawText"
+                        )
+                    }
+                } else {
+                    val t0 = System.currentTimeMillis()
+                    val cleaned = programmaticClean(rawText)
+                    val latency = System.currentTimeMillis() - t0
+                    _state.value = UiState.Result(
+                        rawText = rawText,
+                        cleanedText = cleaned,
+                        latencyMs = latency,
                         intent = selectedIntent,
                     )
-                    is MediaPipeLlmCleanup.Result.Error -> _state.value = UiState.Error(
-                        "Cleanup failed: ${result.message}\n\nRaw STT: $rawText"
-                    )
+                    persistTranscription(rawText, cleaned, selectedIntent, latency)
                 }
             } catch (e: Exception) {
                 _state.value = UiState.Error("Cleanup error: ${e.message}\n\nRaw STT: $rawText")
@@ -126,10 +163,43 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun persistTranscription(raw: String, cleaned: String, intent: VoiceIntent, latencyMs: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                repository.saveTranscription(
+                    Transcription(
+                        rawText = raw,
+                        cleanedText = cleaned,
+                        intent = intent.name,
+                        processingTimeMs = latencyMs.toInt(),
+                        audioLengthMs = 0,
+                    )
+                )
+                android.util.Log.i("VoiceRepository", "Transcription saved — intent=${intent.name}")
+            }.onFailure {
+                android.util.Log.e("VoiceRepository", "Failed to save transcription", it)
+            }
+        }
+    }
+
+    private fun programmaticClean(text: String): String {
+        return text
+            .replace(Regex("\\b(umm+|uh+|um+)\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .replaceFirstChar { it.uppercase() }
+    }
+
     fun stopRecording() {
+        val accumulated = (finalSegments + listOfNotNull(lastPartial.takeIf { it.isNotBlank() }))
+            .joinToString(" ")
         recordJob?.cancel()
         viewModelScope.launch { probe.stop() }
-        _state.value = UiState.Idle
+        if (accumulated.isNotBlank()) {
+            runCleanup(accumulated)
+        } else {
+            _state.value = UiState.Idle
+        }
     }
 
     fun reset() {

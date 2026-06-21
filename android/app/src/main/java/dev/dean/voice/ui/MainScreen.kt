@@ -125,6 +125,10 @@ fun MainScreen(vm: TranscribeViewModel = viewModel()) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedButton(onClick = { vm.stopRecording() }) {
+                        Text("Stop")
+                    }
                 }
 
                 is TranscribeViewModel.UiState.Cleaning -> {
