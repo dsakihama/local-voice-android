@@ -86,11 +86,16 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 - [ ] App frequency ranking logic (recency-weighted, last 30 days) — deferred to Phase 5 where it's consumed
 
 **Phase 5: App Detection & Text Injection**
-- [ ] Auto-detect installed AI apps (Claude, ChatGPT, Perplexity)
-- [ ] Auto-detect installed comms apps (Slack, WhatsApp, Gmail, SMS)
-- [ ] Auto-detect PKB apps (Obsidian)
-- [ ] Accessibility Service text injection (primary)
-- [ ] Clipboard + notification fallback
+- [x] Auto-detect installed AI apps (Claude, ChatGPT, Perplexity) — `TargetAppRegistry.kt`
+- [x] Auto-detect installed comms apps (Slack, WhatsApp, Gmail, SMS) — `TargetAppRegistry.kt`
+- [x] Auto-detect PKB apps (Obsidian) — `TargetAppRegistry.kt`
+- [x] Accessibility Service text injection (primary) — `VoiceAccessibilityService.injectText()`
+- [x] Foreground package tracking — `VoiceAccessibilityService.foregroundPackage` StateFlow
+- [x] Clipboard fallback — `deliverTo()` in `TranscribeViewModel`
+- [x] `AppUsageRecord` written on every delivery (both inject and clipboard paths)
+- [x] Frequency-ranked app menu state — `UiState.SelectTarget` with ranked + installed app map
+- [ ] Target app menu UI — bottom sheet (grouped by category, sorted by frequency) — **in progress**
+- [ ] TODO (post-v1): Remove `UiState.Result` comparison panel once model quality is stable enough to skip review step
 
 **Phase 6: UI**
 - [ ] FAB (draggable, always-on system overlay)
