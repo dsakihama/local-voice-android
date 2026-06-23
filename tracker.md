@@ -98,13 +98,19 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 - Text / Email / Notes now use fast programmatic cleanup (capitalize + strip fillers); LLM reserved for AI Prompt only
 - Notes moved off the 1B LLM (2026-06-23) — model over-applied markdown (turned plain dictation into checkboxes). NOTES markdown prompt kept in `CleanupPrompts.kt`; rewire to LLM once Gemma 4 cleanup is faithful.
 - **No longer blocked on Kaggle** — Gemma 4 E4B LiteRT (`litert-community/gemma-4-E4B-it-litert-lm`) already exists. See model-direction note above.
-- [ ] **Migrate to Gemma 4 E4B-it** — download the prebuilt `gemma-4-E4B-it.litertlm` from **HF `litert-community/gemma-4-E4B-it-litert-lm`** (not the Kaggle "Other" tab — that's QAT checkpoints, not `.litertlm`). First confirm whether `tasks-genai:0.10.35` loads `.litertlm`; if not, migrate `MediaPipeLlmCleanup.kt` runtime from MediaPipe → **LiteRT-LM**. Set GPU backend + speculative decoding, measure latency/thermals on Pixel 10 Pro XL (Tensor G5).
-- [ ] **Re-test faithfulness** across all intents (esp. Notes markdown + word preservation) — the original 1B failure mode
+- [x] **Gemma 4 E4B swap (code)** — `MediaPipeLlmCleanup` loads `gemma-4-E4B-it.litertlm`; `runCleanup` routes all intents through the LLM with programmatic fallback. Pushed `gemma-4-E4B-it.litertlm` (3,659,530,240 bytes, verified) to device. **WIP checkpoint committed — loads but not usable yet (see findings).**
+
+  **🔴 On-device findings (2026-06-23, Pixel 10 Pro XL):**
+  - **GPU/OpenCL backend → CRASH.** Native SIGBUS in `LlmLiteRTOpenClExecutor::Create` (`libllm_inference_engine_jni.so`) — MediaPipe `tasks-genai:0.10.35` can't parse the Gemma 4 `.litertlm` on GPU. Captured via `adb logcat -b crash`.
+  - **CPU/XNNPack backend → loads (~8s) but UNUSABLE.** Single Text cleanup ran multi-minute (process pinned 400%+ CPU, 7:52+ CPU-time, never returned). Backend currently pinned to CPU via `PREFERRED_BACKEND` so it at least doesn't crash.
+  - **Conclusion:** MediaPipe is maintenance-mode and has no working Gemma 4 path on this device. **Runtime migration to LiteRT-LM is required** (also unlocks GPU/NPU, the Tensor G5 build, and speculative decoding).
+- [ ] **Migrate runtime MediaPipe `tasks-genai` → LiteRT-LM** — swap Gradle dep, replace `LlmInference` API in `MediaPipeLlmCleanup.kt` with the LiteRT-LM engine, rewire init/`generateResponse`, drive GPU on Tensor G5. THE blocker for usable Gemma 4.
+- [ ] **Re-test faithfulness** across all intents (esp. Notes markdown + word preservation) — the original 1B failure mode — *blocked on the LiteRT-LM migration (CPU too slow to evaluate).*
 - [ ] **A/B the E2B Tensor G5 NPU build** — `gemma-4-E2B-it_Google_Tensor_G5.litertlm` runs on the phone's NPU (lower thermal, frees GPU). Compare faithfulness + latency + thermals vs E4B-on-GPU; keep whichever clears the faithfulness bar at best perf, hold the other as fallback. (Note: no Tensor G5 build exists for E4B — E4B is GPU-only on this device.)
 - [ ] Prompt refinement loop — tune `CleanupPrompts.kt` across all intents on the new model
 - [ ] Implement in-context learning ("agent files"): retrieve training pairs from Room, inject as few-shot examples into prompt — primary coachability lever
-- [ ] Implement graceful degradation if model file missing (surface clear error, do not silently fail)
-- [ ] Evaluate CPU vs GPU backend latency (set `setPreferredBackend` in `LlmInferenceOptions`)
+- [x] Graceful degradation if model file missing — `runCleanup` now falls back to `programmaticClean` when `isModelReady()` is false
+- [x] Evaluate CPU vs GPU backend latency — done: GPU crashes, CPU unusably slow on MediaPipe (see findings above)
 - [ ] In-app model download flow (replace ADB push with bundled or downloadable model)
 - [ ] Migrate off deprecated `LlmInference` API — `tasks-genai:0.10.35` marks it deprecated; check newer MediaPipe release for replacement API before bumping version
 

@@ -39,7 +39,7 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
         data class Partial(val text: String) : UiState
         /** STT finished; transcript shown read-only while the user picks an intent. */
         data class ReviewTranscript(val rawText: String) : UiState
-        /** STT finished; waiting on Gemma 3 1B cleanup. */
+        /** STT finished; waiting on Gemma 4 E4B cleanup. */
         data class Cleaning(val rawText: String) : UiState
         /** Both STT and cleanup complete — ready for quality comparison. */
         data class Result(
@@ -158,19 +158,11 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 _state.value = UiState.Cleaning(rawText)
 
-                // NOTES is on programmatic cleanup for now — the 1B model over-applies
-                // markdown structure (e.g. checkboxes). Markdown structuring returns to the
-                // LLM path once the Gemma 3 4B model is available (see tracker Phase 3).
-                if (selectedIntent == VoiceIntent.AI_PROMPT) {
-                    if (!cleanup.isModelReady()) {
-                        _state.value = UiState.Error(
-                            "Gemma 3 model not found. Push it to the device:\n" +
-                            "adb push gemma3-1B-it-int4.task /data/local/tmp/gemma3-1B-it-int4.task\n" +
-                            "adb shell run-as dev.dean.voice cp /data/local/tmp/gemma3-1B-it-int4.task /data/data/dev.dean.voice/files/gemma3-1B-it-int4.task\n\n" +
-                            "Raw STT: $rawText"
-                        )
-                        return@launch
-                    }
+                // Phase 3: all intents now route through Gemma 4 E4B (including NOTES,
+                // which the 1B model used to mangle with stray checkboxes). If the model
+                // isn't on the device yet, fall back to fast programmatic cleanup so the
+                // flow still works — graceful degradation, no error wall.
+                if (cleanup.isModelReady()) {
                     when (val result = cleanup.clean(selectedIntent, rawText)) {
                         is MediaPipeLlmCleanup.Result.Success -> {
                             persistTranscription(result.rawText, result.cleanedText, selectedIntent, result.latencyMs)
