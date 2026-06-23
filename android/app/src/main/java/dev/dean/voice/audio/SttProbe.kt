@@ -103,6 +103,9 @@ class SttProbe(private val context: Context) {
 
     suspend fun stop() {
         recognizer.stopRecognition()
+    }
+
+    fun close() {
         recognizer.close()
     }
 }

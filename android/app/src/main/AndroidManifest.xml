@@ -22,6 +22,28 @@
     <!-- Vibration for haptic feedback on FAB tap -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- ── Package visibility (Android 11+) ─────────────────────────── -->
+    <!-- Required to query installed packages via PackageManager.getPackageInfo() -->
+    <queries>
+        <!-- AI -->
+        <package android:name="com.anthropic.claude" />
+        <package android:name="com.openai.chatgpt" />
+        <package android:name="ai.perplexity.app" />
+        <!-- Comms -->
+        <package android:name="com.google.android.apps.messaging" />
+        <package android:name="com.android.messaging" />
+        <package android:name="com.google.android.gm" />
+        <package android:name="com.microsoft.office.outlook" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.Slack" />
+        <package android:name="com.discord" />
+        <package android:name="org.telegram.messenger" />
+        <!-- PKB -->
+        <package android:name="md.obsidian" />
+        <package android:name="notion.id" />
+        <package android:name="com.microsoft.onenote" />
+    </queries>
+
     <!-- ── Application ─────────────────────────────────────────────── -->
 
     <application

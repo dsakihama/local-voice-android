@@ -54,20 +54,26 @@ class VoiceAccessibilityService : AccessibilityService() {
 
     /**
      * Inject [text] into the currently focused input field.
+     * Searches all accessible windows so injection works even when Local Voice
+     * is in the foreground and the target field is in a background window.
      *
      * @return true if injection succeeded; false if fallback is needed.
      */
     fun injectText(text: String): Boolean {
-        val focusedNode: AccessibilityNodeInfo =
-            rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                ?: return false
-
         val args = Bundle().apply {
             putCharSequence(
                 AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
                 text,
             )
         }
-        return focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+
+        // Search all windows for a focused input node
+        val allWindows = windows ?: return false
+        for (window in allWindows) {
+            val focused = window.root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                ?: continue
+            if (focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return true
+        }
+        return false
     }
 }

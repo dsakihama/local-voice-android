@@ -32,6 +32,7 @@ object TargetAppRegistry {
         TargetApp("ai.perplexity.app",        "Perplexity",  Category.AI, "https://perplexity.ai"),
 
         // Comms
+        TargetApp("com.google.android.apps.messaging", "Messages", Category.COMMS),
         TargetApp("com.android.messaging",    "SMS",         Category.COMMS),
         TargetApp("com.google.android.gm",    "Gmail",       Category.COMMS),
         TargetApp("com.microsoft.office.outlook", "Outlook", Category.COMMS),
@@ -48,14 +49,13 @@ object TargetAppRegistry {
 
     /**
      * Returns apps that are installed on this device, grouped by category.
-     * Apps with a webFallbackUrl are always included even if the native app is absent.
+     * webFallbackUrl is used as the launch method but does not affect visibility —
+     * the native app must be installed to appear in the menu.
      */
     fun getInstalledApps(context: Context): Map<Category, List<TargetApp>> {
         val pm: PackageManager = context.packageManager
         return ALL_APPS
-            .filter { app ->
-                app.webFallbackUrl != null || isInstalled(pm, app.id)
-            }
+            .filter { app -> isInstalled(pm, app.id) }
             .groupBy { it.category }
     }
 

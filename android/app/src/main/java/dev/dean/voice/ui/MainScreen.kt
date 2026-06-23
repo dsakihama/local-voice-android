@@ -58,6 +58,22 @@ fun MainScreen(vm: TranscribeViewModel = viewModel()) {
         if (granted) vm.startRecording()
     }
 
+    // Bottom sheet hoisted outside Scaffold so it overlays correctly
+    val selectTargetState = state as? TranscribeViewModel.UiState.SelectTarget
+    if (selectTargetState != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { vm.reset() },
+            sheetState = sheetState,
+        ) {
+            SelectTargetSheet(
+                state = selectTargetState,
+                onAppSelected = vm::deliverTo,
+                onDismiss = { vm.reset() },
+            )
+        }
+    }
+
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Column(
             modifier = Modifier
@@ -180,18 +196,7 @@ fun MainScreen(vm: TranscribeViewModel = viewModel()) {
                 }
 
                 is TranscribeViewModel.UiState.SelectTarget -> {
-                    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-                    ModalBottomSheet(
-                        onDismissRequest = { vm.reset() },
-                        sheetState = sheetState,
-                    ) {
-                        SelectTargetSheet(
-                            state = s,
-                            onAppSelected = vm::deliverTo,
-                            onDismiss = { vm.reset() },
-                        )
-                    }
-                    // Show cleaned text while sheet is open so the screen isn't blank behind it
+                    // Sheet is hoisted above Scaffold — show cleaned text behind it
                     Text(
                         text = s.cleanedText,
                         style = MaterialTheme.typography.bodyMedium,
@@ -270,6 +275,16 @@ private fun SelectTargetSheet(
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
         )
+
+        if (state.rankedApps.all { it.value.isEmpty() }) {
+            Text(
+                "No supported apps found. Text is copied to clipboard.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 16.dp),
+            )
+        }
 
         state.rankedApps.forEach { (category, apps) ->
             if (apps.isEmpty()) return@forEach

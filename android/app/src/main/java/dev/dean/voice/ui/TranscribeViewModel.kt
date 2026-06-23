@@ -98,6 +98,8 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 probe.startRecognition(::onProbeEvent)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e  // let the coroutine framework handle normal cancellation
             } catch (e: Exception) {
                 _state.value = UiState.Error(e.message ?: "Unknown error")
             }
@@ -140,10 +142,10 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 _state.value = UiState.Cleaning(rawText)
 
-                if (selectedIntent == VoiceIntent.AI_PROMPT) {
+                if (selectedIntent == VoiceIntent.AI_PROMPT || selectedIntent == VoiceIntent.NOTES) {
                     if (!cleanup.isModelReady()) {
                         _state.value = UiState.Error(
-                            "Gemma 3 model not found.\n" +
+                            "Gemma 3 model not found. Push it to the device:\n" +
                             "adb push gemma3-1B-it-int4.task /data/local/tmp/gemma3-1B-it-int4.task\n" +
                             "adb shell run-as dev.dean.voice cp /data/local/tmp/gemma3-1B-it-int4.task /data/data/dev.dean.voice/files/gemma3-1B-it-int4.task\n\n" +
                             "Raw STT: $rawText"
@@ -199,13 +201,40 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
 
         val installed = TargetAppRegistry.getInstalledApps(getApplication())
 
-        // Rebuild the map: ranked apps first (in frequency order), then unranked installed apps
-        val sorted = installed.mapValues { (_, apps) ->
+        // Reorder apps within each category: ranked first, then unranked
+        val appsSorted = installed.mapValues { (_, apps) ->
             val inRank = apps.filter { it.id in rankedIds }
                 .sortedByDescending { app -> ranked.first { it.targetAppId == app.id }.useCount }
             val unranked = apps.filter { it.id !in rankedIds }
             inRank + unranked
         }
+
+        // Reorder categories based on intent — most relevant first
+        val categoryOrder = when (intent) {
+            VoiceIntent.AI_PROMPT -> listOf(
+                TargetAppRegistry.Category.AI,
+                TargetAppRegistry.Category.COMMS,
+                TargetAppRegistry.Category.PKB,
+            )
+            VoiceIntent.TEXT -> listOf(
+                TargetAppRegistry.Category.COMMS,
+                TargetAppRegistry.Category.AI,
+                TargetAppRegistry.Category.PKB,
+            )
+            VoiceIntent.EMAIL -> listOf(
+                TargetAppRegistry.Category.COMMS,
+                TargetAppRegistry.Category.PKB,
+                TargetAppRegistry.Category.AI,
+            )
+            VoiceIntent.NOTES -> listOf(
+                TargetAppRegistry.Category.PKB,
+                TargetAppRegistry.Category.COMMS,
+                TargetAppRegistry.Category.AI,
+            )
+        }
+
+        val sorted = linkedMapOf<TargetAppRegistry.Category, List<TargetAppRegistry.TargetApp>>()
+        categoryOrder.forEach { cat -> appsSorted[cat]?.let { sorted[cat] = it } }
 
         UiState.SelectTarget(cleanedText, intent, sorted)
     }
@@ -263,9 +292,37 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
     private fun programmaticClean(text: String): String {
         return text
             .replace(Regex("\\b(umm+|uh+|um+)\\b", RegexOption.IGNORE_CASE), "")
+            .replaceSpokenPunctuation()
+            .replace(Regex("\\s+([.!?,;:)])"), "$1")  // remove space before punctuation
             .replace(Regex("\\s+"), " ")
             .trim()
-            .replaceFirstChar { it.uppercase() }
+            .capitalizeSentences()
+    }
+
+    private fun String.capitalizeSentences(): String {
+        // Capitalize after . ! ? at the start and after sentence-ending punctuation + whitespace
+        return Regex("(^|[.!?]\\s+)(\\p{Ll})")
+            .replace(this) { match ->
+                match.groupValues[1] + match.groupValues[2].uppercase()
+            }
+    }
+
+    private fun String.replaceSpokenPunctuation(): String {
+        // Order matters — longer phrases before shorter ones
+        return this
+            .replace(Regex("\\bquestion mark\\b", RegexOption.IGNORE_CASE), "?")
+            .replace(Regex("\\bexclamation (mark|point)\\b", RegexOption.IGNORE_CASE), "!")
+            .replace(Regex("\\bopen (paren|parenthesis)\\b", RegexOption.IGNORE_CASE), "(")
+            .replace(Regex("\\bclose (paren|parenthesis)\\b", RegexOption.IGNORE_CASE), ")")
+            .replace(Regex("\\bnew (line|paragraph)\\b", RegexOption.IGNORE_CASE), "\n")
+            .replace(Regex("\\bopen quote\\b", RegexOption.IGNORE_CASE), "\"")
+            .replace(Regex("\\bclose quote\\b", RegexOption.IGNORE_CASE), "\"")
+            .replace(Regex("\\bsemicolon\\b", RegexOption.IGNORE_CASE), ";")
+            .replace(Regex("\\bcolon\\b", RegexOption.IGNORE_CASE), ":")
+            .replace(Regex("\\bcomma\\b", RegexOption.IGNORE_CASE), ",")
+            .replace(Regex("\\bdash\\b", RegexOption.IGNORE_CASE), "-")
+            .replace(Regex("\\bellipsis\\b", RegexOption.IGNORE_CASE), "…")
+            .replace(Regex("\\bperiod\\b", RegexOption.IGNORE_CASE), ".")
     }
 
     fun stopRecording() {
@@ -286,6 +343,7 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         viewModelScope.launch { probe.stop() }
+        probe.close()
         cleanup.close()
     }
 }

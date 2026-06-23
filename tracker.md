@@ -94,7 +94,10 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 - [x] Clipboard fallback — `deliverTo()` in `TranscribeViewModel`
 - [x] `AppUsageRecord` written on every delivery (both inject and clipboard paths)
 - [x] Frequency-ranked app menu state — `UiState.SelectTarget` with ranked + installed app map
-- [ ] Target app menu UI — bottom sheet (grouped by category, sorted by frequency) — **in progress**
+- [x] Target app menu UI — bottom sheet (grouped by category, sorted by frequency)
+- [x] Package visibility declared in manifest (`<queries>` block — Android 11+ requirement)
+- [x] Category order respects intent (Text → Comms first, Notes → PKB first, etc.)
+- [x] Injection confirmed working end-to-end; messaging apps (Messages, WhatsApp) use clipboard fallback as designed
 - [ ] TODO (post-v1): Remove `UiState.Result` comparison panel once model quality is stable enough to skip review step
 
 **Phase 6: UI**
@@ -116,6 +119,7 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 
 **Future Investigations (post-Phase 8)**
 - [ ] Evaluate Gemma 3 4B int4 (`.task` format, Kaggle) if 1B quality is insufficient after prompt tuning — ~2.5 GB, expect 5–15s inference vs ~1100ms; try GPU variant first (Tensor G4 via OpenCL/Vulkan)
+- [ ] Evaluate Gemma 4 4B — check for LiteRT/MediaPipe-compatible `.task` format on Kaggle; compare cleanup quality and latency against Gemma 3 4B int4
 
 **Phase 8: Testing & Polish**
 - [ ] End-to-end test on Pixel 10 Pro XL
@@ -133,6 +137,7 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 <!-- Most recent first -->
 | Date | Item |
 |------|------|
+| 2026-06-22 | Phase 5 complete — accessibility injection + clipboard fallback + app detection + frequency-ranked intent-aware app menu all working on device. Messaging apps use clipboard fallback as designed. |
 | 2026-06-20 | MediaPipe LLM Inference + Gemma 3 1B int4 validated on device — cleanup working across all intents, ~1100ms latency. Prompt tuning in progress. |
 | 2026-06-20 | ML Kit Prompt API confirmed blocked on ASI build `B.25.playstore.pixel10.919165660` — pivoted to MediaPipe which bundles its own inference engine and bypasses AICore. |
 | 2026-06-19 | ML Kit GenAI STT validated on device — AICore available, streaming partials confirmed, noticeably faster than Whisper CPU baseline. Silence detection handled natively by the recognizer (CompletedResponse fires automatically). |
