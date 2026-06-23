@@ -36,10 +36,13 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 **Model direction (decided 2026-06-23):** Gemma 3 1B did not meet expectations — it made things up (over-applied markdown, didn't faithfully preserve dictated words) and wasn't reliably coachable via examples. **Move cleanup to Gemma 4.** On-device Gemma 4 = **E2B / E4B** (effective ~2B / ~4B; there is no literal Gemma 4 "1B"). Target **E4B first** (safe, most faithful), then attempt to downsize to **E2B**; use the smallest variant that stays faithful + coachable. Strategy is example-driven: less free-form generation, more steering by pre-loaded few-shot "agent files" (this is the Phase 3 in-context-learning task). **NOTE: the on-device build is text-only — it does NOT replace ML Kit STT.** Full numbers in project memory.
 
 **Specific models to download (Kaggle):**
-- Kaggle model page: **`google/gemma-4`** (kaggle.com/models/google/gemma-4) — official Google release; the LiteRT-LM variations are mirrored 1:1 on Hugging Face under `litert-community`.
-- **Primary → E4B:** variation `gemma-4-E4B-it-litert-lm` → file **`gemma-4-E4B-it.litertlm`** (HF mirror: `litert-community/gemma-4-E4B-it-litert-lm`). ~3.66 GB.
-- **Downsize/fallback → E2B:** variation `gemma-4-E2B-it-litert-lm` → file **`gemma-4-E2B-it.litertlm`** (HF mirror: `litert-community/gemma-4-E2B-it-litert-lm`). ~1.5 GB.
-- Want the **`-it`** (instruction-tuned) variants. Skip the `-web.task` files — those are for browser/WebGPU, not Android.
+- Kaggle model page: **`google/gemma-4`** (kaggle.com/models/google/gemma-4). The on-device files are under the **"others"** framework tab = **LiteRT-LM**. **Ignore the Transformers / GGUF / ONNX / Flax / Keras tabs** — those are for fine-tuning/server/other runtimes, not this app. LiteRT-LM variations are mirrored 1:1 on Hugging Face under `litert-community`.
+- **Primary → E4B:** file **`gemma-4-E4B-it.litertlm`** (~3.66 GB), generic — runs CPU (XNNPack) / GPU (ML Drift). HF: `litert-community/gemma-4-E4B-it-litert-lm`. **No Tensor G5-specific build exists for E4B** → GPU is the ceiling for E4B on this device.
+- **Downsize/perf path → E2B:** two relevant files in `litert-community/gemma-4-E2B-it-litert-lm`:
+  - `gemma-4-E2B-it.litertlm` (~2.59 GB) — generic CPU/GPU
+  - 🎯 **`gemma-4-E2B-it_Google_Tensor_G5.litertlm`** (~3.95 GB) — **compiled for the Tensor G5 = the Pixel 10 Pro XL's exact chip (NPU/TPU-targeted)**. Lower thermal, frees the GPU, likely faster. This is the strongest reason the E2B step may beat E4B on this device.
+- Want the **`-it`** (instruction-tuned) variants. **Skip all `-web.litertlm` / `-web.task` files** — browser/WebGPU only.
+- **Decision is empirical:** E4B-generic-on-GPU (max faithfulness, no chip build) vs E2B-Tensor-G5-on-NPU (max perf/thermal, smaller model). Benchmark both on-device for faithfulness + latency + thermals before locking one in.
 
 **⚠️ Format/runtime change — NOT a drop-in swap:** Gemma 4 ships as **`.litertlm`** (new LiteRT-LM format), not the **`.task`** format `MediaPipeLlmCleanup.kt` loads today via `tasks-genai:0.10.35`. MediaPipe LLM Inference is now in **maintenance mode**; Gemma 4 on-device is meant to run on the **LiteRT-LM** runtime (adds KV-cache mgmt, prompt templating, function calling on top of LiteRT). So Phase 3 likely means **migrating the runtime from MediaPipe `tasks-genai` → LiteRT-LM**, not just pushing a new model file. Confirm whether the installed `tasks-genai` can load `.litertlm` before assuming a clean swap; budget for the runtime migration if not.
 
@@ -94,9 +97,9 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 - Text / Email / Notes now use fast programmatic cleanup (capitalize + strip fillers); LLM reserved for AI Prompt only
 - Notes moved off the 1B LLM (2026-06-23) — model over-applied markdown (turned plain dictation into checkboxes). NOTES markdown prompt kept in `CleanupPrompts.kt`; rewire to LLM once Gemma 4 cleanup is faithful.
 - **No longer blocked on Kaggle** — Gemma 4 E4B LiteRT (`litert-community/gemma-4-E4B-it-litert-lm`) already exists. See model-direction note above.
-- [ ] **Migrate to Gemma 4 E4B-it** — download `gemma-4-E4B-it.litertlm` from Kaggle `google/gemma-4` (or HF `litert-community/gemma-4-E4B-it-litert-lm`). First confirm whether `tasks-genai:0.10.35` loads `.litertlm`; if not, migrate `MediaPipeLlmCleanup.kt` runtime from MediaPipe → **LiteRT-LM**. Set GPU backend + speculative decoding, measure latency/thermals on Pixel 10 Pro XL (Tensor G5).
+- [ ] **Migrate to Gemma 4 E4B-it** — download `gemma-4-E4B-it.litertlm` from Kaggle `google/gemma-4` ("others"/LiteRT-LM tab) or HF `litert-community/gemma-4-E4B-it-litert-lm`. First confirm whether `tasks-genai:0.10.35` loads `.litertlm`; if not, migrate `MediaPipeLlmCleanup.kt` runtime from MediaPipe → **LiteRT-LM**. Set GPU backend + speculative decoding, measure latency/thermals on Pixel 10 Pro XL (Tensor G5).
 - [ ] **Re-test faithfulness** across all intents (esp. Notes markdown + word preservation) — the original 1B failure mode
-- [ ] **Attempt downsize E4B → E2B** once E4B proves the flow; keep whichever stays faithful, hold the other as fallback
+- [ ] **A/B the E2B Tensor G5 NPU build** — `gemma-4-E2B-it_Google_Tensor_G5.litertlm` runs on the phone's NPU (lower thermal, frees GPU). Compare faithfulness + latency + thermals vs E4B-on-GPU; keep whichever clears the faithfulness bar at best perf, hold the other as fallback. (Note: no Tensor G5 build exists for E4B — E4B is GPU-only on this device.)
 - [ ] Prompt refinement loop — tune `CleanupPrompts.kt` across all intents on the new model
 - [ ] Implement in-context learning ("agent files"): retrieve training pairs from Room, inject as few-shot examples into prompt — primary coachability lever
 - [ ] Implement graceful degradation if model file missing (surface clear error, do not silently fail)
