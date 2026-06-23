@@ -27,10 +27,23 @@
     <!-- ── Package visibility (Android 11+) ─────────────────────────── -->
     <!-- Required to query installed packages via PackageManager.getPackageInfo() -->
     <queries>
+        <!-- Share-sheet targets resolve via ACTION_SEND text/plain (package visibility, API 30+) -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <!-- Obsidian new-note deep link probe -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="obsidian" />
+        </intent>
         <!-- AI -->
         <package android:name="com.anthropic.claude" />
         <package android:name="com.openai.chatgpt" />
         <package android:name="ai.perplexity.app" />
+        <package android:name="com.microsoft.copilot" />
+        <package android:name="com.google.android.apps.bard" />
+        <package android:name="ai.x.grok" />
         <!-- Comms -->
         <package android:name="com.google.android.apps.messaging" />
         <package android:name="com.android.messaging" />

@@ -94,12 +94,25 @@ class SttProbe(private val context: Context) {
                     onEvent(Event.Complete)
                 }
                 is SpeechRecognizerResponse.ErrorResponse -> {
-                    Log.e(TAG, "Error: ${response.e}")
-                    onEvent(Event.Err(response.e.message ?: "Recognition error"))
+                    val msg = response.e.message ?: "Recognition error"
+                    if (isCancellation(msg)) {
+                        // Benign — the recognizer reports CANCELLED whenever we stop the
+                        // session ourselves (stopRecognition/close). Not a user-facing error;
+                        // the stop handler has already captured the transcript.
+                        Log.i(TAG, "Recognition cancelled (expected on stop): $msg")
+                    } else {
+                        Log.e(TAG, "Error: ${response.e}")
+                        onEvent(Event.Err(msg))
+                    }
                 }
             }
         }
     }
+
+    /** A CANCELLED response is what the recognizer emits when we stop it — not an error. */
+    private fun isCancellation(message: String): Boolean =
+        message.contains("CANCELLED", ignoreCase = true) ||
+            message.contains("completed exceptionally", ignoreCase = true)
 
     suspend fun stop() {
         recognizer.stopRecognition()

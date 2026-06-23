@@ -25,6 +25,24 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 
 ## Actions / In Progress
 
+**Where things stand (2026-06-23):** Flow pivot to transcript-first + native share sheet is complete and verified on-device (FAB, waveform, Obsidian/Gmail/Messages share all confirmed). Full detail in the Done table below. The build is clean and installed on the Pixel 10 Pro XL.
+
+**⚠️ First thing next session — COMMIT.** All of the flow-pivot work is uncommitted on `main` (last commit is `ea5d1ef` Jarvis design system). Uncommitted:
+- Modified: `AndroidManifest.xml`, `TargetAppRegistry.kt`, `SttProbe.kt`, `CleanupPrompts.kt`, `MainScreen.kt`, `TranscribeViewModel.kt`, `tracker.md`
+- New: `share/ShareSheetLauncher.kt`, `ui/ListeningWave.kt`, `design/share-text-requirements.md`
+- Suggest committing on a branch (not directly on `main`).
+
+**Next up (in priority order):**
+1. **Commit** the flow-pivot work (see above).
+2. **Decide the dormant accessibility path** — `UiState.SelectTarget` / `deliverTo()` / `buildSelectTarget()` / `launchApp()` in `TranscribeViewModel` and `SelectTargetSheet` in `MainScreen` are now dead code, kept only for a possible A/B vs the share sheet. Either wire up an A/B toggle or delete them. (App-usage frequency ranking + `AppUsageRecord` writes go dormant with it.)
+3. **Decide clipboard behavior** — currently copies to clipboard on *every* share, which triggers the Android 13+ system "Copied" chip. Keep always-copy, or switch to copy-on-fallback only to suppress the chip.
+4. **Remove `UiState.Result` comparison panel** — the RAW/CLEANED debug review screen is no longer on the main path; safe to delete (Phase 5 post-v1 TODO).
+5. **Phase 7: Settings & Permissions** — next major build phase (mic/accessibility/clipboard permission flows, settings screen, data dashboard). See Phase 7 list.
+
+**Deferred — do not pick up without the trigger:**
+- **Notes markdown structuring** → blocked on Gemma 3 4B model availability on Kaggle. Notes is programmatic-only for now (1B over-applied checkboxes).
+- **AICore not-ready first-run UI** → deferred; self-managing STT model is `AVAILABLE` on this device, no crash path. See annotated note in Phase 6.
+
 ---
 
 ## Completed Phases
@@ -70,6 +88,7 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 
 **Phase 3: LLM & Cleanup Refinement** ⏸ Deferred — blocked on model availability
 - Text / Email / Notes now use fast programmatic cleanup (capitalize + strip fillers); LLM reserved for AI Prompt only
+- Notes moved off the 1B LLM (2026-06-23) — model over-applied markdown (turned plain dictation into checkboxes). NOTES markdown prompt kept in `CleanupPrompts.kt`; rewire to LLM once Gemma 3 4B lands.
 - Unblocked by: Gemma 3 4B LiteRT release on Kaggle (not yet available as of 2026-06-20)
 - [ ] Prompt refinement loop — tune `CleanupPrompts.kt` across all intents once 4B model is available
 - [ ] Implement in-context learning: retrieve training pairs from Room, inject as few-shot examples into prompt
@@ -101,13 +120,15 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 - [ ] TODO (post-v1): Remove `UiState.Result` comparison panel once model quality is stable enough to skip review step
 
 **Phase 6: UI**
-- [ ] FAB (draggable, always-on system overlay)
-- [ ] Intent selection bottom sheet (AI / Text / Email / Notes)
-- [ ] Listening state (waveform animation, red dot)
-- [ ] Processing state (spinner + label)
-- [ ] Target app menu (grouped by category, sorted by frequency)
-- [ ] Toast confirmations
-- [ ] AICore not-ready state (first-run model not yet downloaded — show loading indicator, not a crash)
+- [x] Flow reordered to transcript-first: record → STT → review transcript → pick intent → cleanup → share
+- [x] Delivery via native share sheet (`ShareSheetLauncher`), intent-shaped targets — replaces custom app menu on the main path (injection kept dormant)
+- [x] FAB (draggable, always-on system overlay) — confirmed working on-device
+- [x] Intent selection bottom sheet (AI / Text / Email / Notes) — now shown *after* capture
+- [x] Listening state (waveform animation, red dot) — `ListeningWave`, confirmed working
+- [x] Processing state (spinner + label) — `ProcessingSteps`
+- [x] Target app menu — superseded by native share sheet (Obsidian/Gmail/Messages confirmed working)
+- [x] ~~Toast confirmations~~ — removed per feedback (share sheet is the confirmation)
+- [ ] AICore not-ready state (first-run model not yet downloaded — show loading indicator, not a crash) — **DEFERRED (2026-06-23)**. This is about the AICore-managed STT model (Gemini Nano), which self-downloads on demand and is **not** CLI/ADB-pushable (only the Gemma cleanup `.task` is). On this device AICore STT is already `AVAILABLE` (Phase 2.1), so the download path never fires. `checkStatus()` already handles AVAILABLE→record, DOWNLOADABLE/DOWNLOADING→download, UNAVAILABLE→clean error screen — no crash path either way. Only real exposure is the post-restart/AICore-reset edge case, parked in Phase 8. Revisit before any non-dev release.
 
 **Phase 7: Settings & Permissions**
 - [ ] Microphone permission request flow
@@ -137,6 +158,8 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 <!-- Most recent first -->
 | Date | Item |
 |------|------|
+| 2026-06-23 | Flow pivot **verified on-device** — FAB, waveform, transcript-first capture, and native share sheet all working. Confirmed: Obsidian share, Gmail (text → body, cursor left for recipient), Messages. Post-share toast removed per feedback. Notes moved to programmatic cleanup (1B over-applied checkboxes). |
+| 2026-06-23 | Flow pivot implemented — transcript-first capture, intent chosen *after* STT, delivery via native share sheet with intent-shaped targets (`ShareSheetLauncher`). Accessibility injection kept dormant. |
 | 2026-06-22 | Phase 5 complete — accessibility injection + clipboard fallback + app detection + frequency-ranked intent-aware app menu all working on device. Messaging apps use clipboard fallback as designed. |
 | 2026-06-20 | MediaPipe LLM Inference + Gemma 3 1B int4 validated on device — cleanup working across all intents, ~1100ms latency. Prompt tuning in progress. |
 | 2026-06-20 | ML Kit Prompt API confirmed blocked on ASI build `B.25.playstore.pixel10.919165660` — pivoted to MediaPipe which bundles its own inference engine and bypasses AICore. |

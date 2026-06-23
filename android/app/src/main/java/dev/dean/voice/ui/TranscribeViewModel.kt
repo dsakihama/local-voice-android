@@ -17,6 +17,7 @@ import dev.dean.voice.data.db.entities.Transcription
 import dev.dean.voice.intent.VoiceIntent
 import dev.dean.voice.model.MediaPipeLlmCleanup
 import dev.dean.voice.service.VoiceAccessibilityService
+import dev.dean.voice.share.ShareSheetLauncher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +37,8 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
         data object Downloading : UiState
         data object Recording : UiState
         data class Partial(val text: String) : UiState
+        /** STT finished; transcript shown read-only while the user picks an intent. */
+        data class ReviewTranscript(val rawText: String) : UiState
         /** STT finished; waiting on Gemma 3 1B cleanup. */
         data class Cleaning(val rawText: String) : UiState
         /** Both STT and cleanup complete — ready for quality comparison. */
@@ -53,7 +56,7 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             /** targetAppId → recency-weighted use count for this intent (0 if never used). */
             val useCounts: Map<String, Int> = emptyMap(),
         ) : UiState
-        /** Text was injected directly into the target app via accessibility. */
+        /** Text was injected directly into the target app via accessibility (dormant path). */
         data class Delivered(val appName: String) : UiState
         /** Injection failed or service unavailable — text is in clipboard. */
         data class ClipboardFallback(val appName: String) : UiState
@@ -130,12 +133,23 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             }
             is SttProbe.Event.Complete         -> {
                 val fullText = finalSegments.joinToString(" ")
-                if (fullText.isNotBlank()) runCleanup(fullText)
+                if (fullText.isNotBlank()) _state.value = UiState.ReviewTranscript(fullText)
             }
             is SttProbe.Event.Unavailable      -> _state.value =
                 UiState.Error("AICore unavailable (status=${event.status})")
             is SttProbe.Event.Err              -> _state.value = UiState.Error(event.message)
         }
+    }
+
+    /**
+     * Post-transcript entry point: the user has reviewed the captured text and
+     * picked an intent. Applies that intent's processing instruction (cleanup),
+     * then hands the result to the native share sheet.
+     */
+    fun chooseIntent(intent: VoiceIntent) {
+        val rawText = (_state.value as? UiState.ReviewTranscript)?.rawText ?: return
+        _intent.value = intent
+        runCleanup(rawText)
     }
 
     private fun runCleanup(rawText: String) {
@@ -144,7 +158,10 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 _state.value = UiState.Cleaning(rawText)
 
-                if (selectedIntent == VoiceIntent.AI_PROMPT || selectedIntent == VoiceIntent.NOTES) {
+                // NOTES is on programmatic cleanup for now — the 1B model over-applies
+                // markdown structure (e.g. checkboxes). Markdown structuring returns to the
+                // LLM path once the Gemma 3 4B model is available (see tracker Phase 3).
+                if (selectedIntent == VoiceIntent.AI_PROMPT) {
                     if (!cleanup.isModelReady()) {
                         _state.value = UiState.Error(
                             "Gemma 3 model not found. Push it to the device:\n" +
@@ -157,7 +174,7 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
                     when (val result = cleanup.clean(selectedIntent, rawText)) {
                         is MediaPipeLlmCleanup.Result.Success -> {
                             persistTranscription(result.rawText, result.cleanedText, selectedIntent, result.latencyMs)
-                            _state.value = buildSelectTarget(result.cleanedText, selectedIntent)
+                            shareCleaned(result.cleanedText, selectedIntent)
                         }
                         is MediaPipeLlmCleanup.Result.Error -> _state.value = UiState.Error(
                             "Cleanup failed: ${result.message}\n\nRaw STT: $rawText"
@@ -168,12 +185,34 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
                     val cleaned = programmaticClean(rawText)
                     val latency = System.currentTimeMillis() - t0
                     persistTranscription(rawText, cleaned, selectedIntent, latency)
-                    _state.value = buildSelectTarget(cleaned, selectedIntent)
+                    shareCleaned(cleaned, selectedIntent)
                 }
             } catch (e: Exception) {
                 _state.value = UiState.Error("Cleanup error: ${e.message}\n\nRaw STT: $rawText")
             }
         }
+    }
+
+    /**
+     * Always copy the cleaned text to the clipboard, then hand it to the native
+     * share sheet with intent-shaped targets. For Notes, a date/time heading is
+     * prepended so the timestamp lands as the note title when pasted into Obsidian.
+     */
+    private fun shareCleaned(cleanedText: String, intent: VoiceIntent) {
+        val delivered = if (intent == VoiceIntent.NOTES) prependTimestamp(cleanedText) else cleanedText
+        val context: Context = getApplication()
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("voice", delivered))
+        ShareSheetLauncher.share(context, intent, delivered)
+        // No confirmation toast — the share sheet is the user's confirmation; return to idle.
+        _state.value = UiState.Idle
+    }
+
+    /** "# 2026-06-23 2.45 PM\n\n…" — filename-safe (no colon/slash) for the Obsidian title. */
+    private fun prependTimestamp(text: String): String {
+        val ts = java.time.LocalDateTime.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd h.mm a"))
+        return "# $ts\n\n$text"
     }
 
     private fun persistTranscription(raw: String, cleaned: String, intent: VoiceIntent, latencyMs: Long) {
@@ -334,7 +373,7 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
         recordJob?.cancel()
         viewModelScope.launch { probe.stop() }
         if (accumulated.isNotBlank()) {
-            runCleanup(accumulated)
+            _state.value = UiState.ReviewTranscript(accumulated)
         } else {
             _state.value = UiState.Idle
         }

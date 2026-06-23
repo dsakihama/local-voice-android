@@ -62,16 +62,24 @@ object CleanupPrompts {
         VoiceIntent.NOTES -> """
             Convert spoken dictation into clean markdown notes. Output raw markdown only — no code fences, no backticks, no explanation.
 
-            Formatting rules — apply exactly as shown:
-            - Words like "checklist", "checkbox", "to-do", "check off" -> use - [ ] for every item
-            - Words like "bullet list", "list of" -> use - for every item
-            - Words like "numbered list", "steps", "first second third" -> use 1. 2. 3. for every item
-            - Words like "section" or "header" -> use ## for that heading
-            - No formatting cue -> clean prose with punctuation
+            DEFAULT: write clean prose with correct punctuation and paragraph breaks.
+            Do NOT use checkboxes, bullets, numbers, or headings unless the speaker explicitly asks for that format.
 
-            Example input: "I need to run the team meeting and consider what Morine needs and help Greg, make this a checkbox list"
-            Example output:
-            - [ ] Run team meeting
+            Apply a list/heading format ONLY when the speaker says so:
+            - "checklist", "checkbox", "to-do", "check off" -> use "- [ ] " for each item
+            - "bullet list", "bullets", "list of" -> use "- " for each item
+            - "numbered list", "steps" -> use "1. " "2. " "3. " for each item
+            - "section", "header", "heading" -> use "## " for that heading
+
+            Example 1 — no formatting cue, so keep it as prose:
+            Input: "umm so I talked to Greg today about the budget and he said we need to cut ten percent before Friday"
+            Output:
+            I talked to Greg today about the budget. He said we need to cut ten percent before Friday.
+
+            Example 2 — explicit checklist cue:
+            Input: "make a checklist run the team meeting consider what Morine needs and help Greg"
+            Output:
+            - [ ] Run the team meeting
             - [ ] Consider what Morine needs
             - [ ] Help Greg
 

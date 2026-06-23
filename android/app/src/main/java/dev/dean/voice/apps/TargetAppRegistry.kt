@@ -26,10 +26,13 @@ object TargetAppRegistry {
 
     /** All known apps — full list regardless of installation status. */
     private val ALL_APPS = listOf(
-        // AI
+        // AI — package names verified against each app's Play Store id= param.
         TargetApp("com.anthropic.claude",     "Claude",      Category.AI, "https://claude.ai"),
         TargetApp("com.openai.chatgpt",       "ChatGPT",     Category.AI, "https://chat.openai.com"),
         TargetApp("ai.perplexity.app",        "Perplexity",  Category.AI, "https://perplexity.ai"),
+        TargetApp("com.microsoft.copilot",    "Copilot",     Category.AI),
+        TargetApp("com.google.android.apps.bard", "Gemini",  Category.AI),  // legacy "bard" package
+        TargetApp("ai.x.grok",                "Grok",        Category.AI),
 
         // Comms
         TargetApp("com.google.android.apps.messaging", "Messages", Category.COMMS),
@@ -58,6 +61,15 @@ object TargetAppRegistry {
             .filter { app -> isInstalled(pm, app.id) }
             .groupBy { it.category }
     }
+
+    /** Installed apps in a single category, in registry order. Used by the share launcher. */
+    fun installedApps(context: Context, category: Category): List<TargetApp> {
+        val pm: PackageManager = context.packageManager
+        return ALL_APPS.filter { it.category == category && isInstalled(pm, it.id) }
+    }
+
+    fun isInstalled(context: Context, packageName: String): Boolean =
+        isInstalled(context.packageManager, packageName)
 
     private fun isInstalled(pm: PackageManager, packageName: String): Boolean {
         return try {

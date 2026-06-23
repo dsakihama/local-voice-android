@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,6 +39,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -47,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,7 +79,20 @@ fun MainScreen(
 ) {
     val state by vm.state.collectAsState()
     val selectedIntent by vm.intent.collectAsState()
-    var showIntentSheet by remember { mutableStateOf(false) }
+
+    // Elapsed-time ticker for the REC indicator while listening.
+    val listening = state is TranscribeViewModel.UiState.Recording ||
+        state is TranscribeViewModel.UiState.Partial
+    var elapsedSec by remember { mutableIntStateOf(0) }
+    LaunchedEffect(listening) {
+        if (listening) {
+            elapsedSec = 0
+            while (true) {
+                delay(1_000)
+                elapsedSec++
+            }
+        }
+    }
 
     LaunchedEffect(Unit) { vm.warmupPromptModel() }
 
@@ -85,29 +102,27 @@ fun MainScreen(
         if (granted) vm.startRecording()
     }
 
-    // Launched from the floating bubble — open the intent picker as soon as we're idle.
+    // Launched from the floating bubble — start capturing as soon as we're idle.
     LaunchedEffect(autoRecord, state) {
         if (autoRecord && state is TranscribeViewModel.UiState.Idle) {
             onAutoRecordConsumed()
-            showIntentSheet = true
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
-    // Intent picker — tapping the orb opens this; choosing an intent starts capture.
-    if (showIntentSheet) {
+    // Intent picker — shown after capture, over the transcript. Choosing an intent
+    // applies its cleanup and hands the result to the native share sheet.
+    val reviewState = state as? TranscribeViewModel.UiState.ReviewTranscript
+    if (reviewState != null) {
         val intentSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
-            onDismissRequest = { showIntentSheet = false },
+            onDismissRequest = { vm.reset() },
             sheetState = intentSheetState,
             containerColor = Jarvis.Deep,
         ) {
             IntentSheet(
                 selected = selectedIntent,
-                onPick = { intent ->
-                    vm.setIntent(intent)
-                    showIntentSheet = false
-                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                },
+                onPick = { intent -> vm.chooseIntent(intent) },
             )
         }
     }
@@ -144,8 +159,11 @@ fun MainScreen(
 
             when (val s = state) {
                 is TranscribeViewModel.UiState.Idle -> {
-                    VoiceOrb(state = OrbState.Idle, onClick = { showIntentSheet = true })
-                    OrbCaption("Tap to dictate", "Pick an intent, then speak")
+                    VoiceOrb(
+                        state = OrbState.Idle,
+                        onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                    )
+                    OrbCaption("Tap to dictate", "Speak, then choose where it goes")
                     Spacer(Modifier.height(40.dp))
                     HorizontalDivider(color = Jarvis.Line)
                     Spacer(Modifier.height(20.dp))
@@ -163,15 +181,15 @@ fun MainScreen(
                 }
 
                 is TranscribeViewModel.UiState.Recording -> {
-                    RecKicker()
-                    VoiceOrb(state = OrbState.Listening, onClick = { vm.stopRecording() })
-                    OrbCaption("Listening", "Speak now · tap the orb to stop")
+                    RecKicker(elapsedSec)
+                    ListeningWave(modifier = Modifier.clickable { vm.stopRecording() })
+                    OrbCaption("Listening", "Tap anywhere to stop")
                 }
 
                 is TranscribeViewModel.UiState.Partial -> {
-                    RecKicker()
-                    VoiceOrb(state = OrbState.Listening, onClick = { vm.stopRecording() })
-                    Spacer(Modifier.height(20.dp))
+                    RecKicker(elapsedSec)
+                    ListeningWave(modifier = Modifier.clickable { vm.stopRecording() })
+                    Spacer(Modifier.height(24.dp))
                     Text(
                         text = s.text,
                         style = MaterialTheme.typography.bodyLarge,
@@ -180,17 +198,21 @@ fun MainScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "tap the orb to stop",
+                        "tap the wave to stop",
                         style = MaterialTheme.typography.bodySmall,
                         color = Jarvis.Mist,
                     )
                 }
 
+                is TranscribeViewModel.UiState.ReviewTranscript -> {
+                    // Intent picker is hoisted above Scaffold — show captured text behind it.
+                    Kicker("CAPTURED")
+                    Spacer(Modifier.height(16.dp))
+                    OutputCard(label = "TRANSCRIPT", text = s.rawText, accent = false)
+                }
+
                 is TranscribeViewModel.UiState.Cleaning -> {
-                    VoiceOrb(state = OrbState.Processing, onClick = {})
-                    OrbCaption("Cleaning up…", "Gemma 3 1B")
-                    Spacer(Modifier.height(20.dp))
-                    OutputCard(label = "RAW", text = s.rawText, accent = false)
+                    ProcessingSteps()
                 }
 
                 is TranscribeViewModel.UiState.Result -> {
@@ -305,13 +327,63 @@ private fun Kicker(text: String) {
 }
 
 @Composable
-private fun RecKicker() {
+private fun RecKicker(elapsedSec: Int) {
+    val mm = elapsedSec / 60
+    val ss = (elapsedSec % 60).toString().padStart(2, '0')
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(8.dp).background(Jarvis.Signal, RoundedCornerShape(50)))
         Spacer(Modifier.size(8.dp))
-        Kicker("REC")
+        Kicker("REC · $mm:$ss")
     }
     Spacer(Modifier.height(20.dp))
+}
+
+/** Processing checklist for the cleanup phase (design s4, right). */
+@Composable
+private fun ProcessingSteps() {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Kicker("WORKING")
+        Spacer(Modifier.height(10.dp))
+        Text("Tidying up your words", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Jarvis.Frost)
+        Spacer(Modifier.height(24.dp))
+        LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(50)),
+            color = Jarvis.Signal,
+            trackColor = Jarvis.Slate,
+        )
+        Spacer(Modifier.height(28.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            StepRow(StepState.Done, "Captured audio")
+            StepRow(StepState.Done, "Transcribed on-device")
+            StepRow(StepState.Active, "Polishing your words")
+        }
+    }
+}
+
+private enum class StepState { Done, Active, Pending }
+
+@Composable
+private fun StepRow(state: StepState, label: String) {
+    val icon = when (state) {
+        StepState.Done -> Icons.Filled.CheckCircle
+        StepState.Active -> Icons.Filled.RadioButtonChecked
+        StepState.Pending -> Icons.Filled.RadioButtonUnchecked
+    }
+    val tint = if (state == StepState.Pending) Jarvis.Muted else Jarvis.Signal
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.size(12.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = when (state) {
+                StepState.Active -> Jarvis.Frost
+                StepState.Done -> Jarvis.Mist
+                StepState.Pending -> Jarvis.Muted
+            },
+            fontWeight = if (state == StepState.Active) FontWeight.Bold else FontWeight.Normal,
+        )
+    }
 }
 
 @Composable
@@ -511,11 +583,11 @@ private fun IntentSheet(
             .padding(horizontal = 24.dp)
             .padding(bottom = 32.dp),
     ) {
-        Kicker("DICTATION INTENT")
+        Kicker("WHAT'S THIS FOR?")
         Spacer(Modifier.height(10.dp))
-        Text("What are you dictating?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Jarvis.Frost)
+        Text("Where's this going?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Jarvis.Frost)
         Spacer(Modifier.height(6.dp))
-        Text("Intent shapes how your words get cleaned up.", style = MaterialTheme.typography.bodyMedium, color = Jarvis.Mist)
+        Text("Intent shapes the cleanup and the share targets.", style = MaterialTheme.typography.bodyMedium, color = Jarvis.Mist)
         Spacer(Modifier.height(20.dp))
 
         VoiceIntent.entries.chunked(2).forEach { rowIntents ->
