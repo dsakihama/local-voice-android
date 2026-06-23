@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Main app theme (dark, Material 3) -->
+    <!-- Main app theme (Jarvis dark, Material 3) -->
     <style name="Theme.LocalVoice" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Colors wired in via Compose Theme.kt — leave XML minimal -->
+        <!-- Colors wired in via Compose Theme.kt — keep window bg dark to avoid a white flash -->
+        <item name="android:windowBackground">@color/jarvis_void</item>
     </style>
 
     <!-- Transparent activity theme for the overlay FAB activity -->

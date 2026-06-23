@@ -3,23 +3,51 @@ package dev.dean.voice.ui.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
-    primary   = Color(0xFFBB86FC),
-    secondary = Color(0xFF03DAC6),
-    background = Color(0xFF121212),
-    surface    = Color(0xFF1E1E1E),
-    onPrimary  = Color.Black,
-    onSecondary = Color.Black,
-    onBackground = Color.White,
-    onSurface    = Color.White,
+/**
+ * Jarvis dark theme. Cyan signal on a near-black void; depth comes from glow and
+ * hairline borders, not heavy shadows. There is no light variant by design.
+ */
+private val JarvisColorScheme = darkColorScheme(
+    primary = Jarvis.Signal,
+    onPrimary = Jarvis.Void,
+    primaryContainer = Jarvis.SignalDim,
+    onPrimaryContainer = Jarvis.Frost,
+
+    secondary = Jarvis.SignalDeep,
+    onSecondary = Jarvis.Void,
+
+    tertiary = Jarvis.Core,
+    onTertiary = Jarvis.Frost,
+
+    background = Jarvis.Void,
+    onBackground = Jarvis.Frost,
+
+    surface = Jarvis.Deep,
+    onSurface = Jarvis.Frost,
+    surfaceVariant = Jarvis.Slate,
+    onSurfaceVariant = Jarvis.Mist,
+
+    // Sheets / menus / elevated containers
+    surfaceContainerLowest = Jarvis.Void,
+    surfaceContainerLow = Jarvis.Deep,
+    surfaceContainer = Jarvis.Slate,
+    surfaceContainerHigh = Jarvis.Slate2,
+    surfaceContainerHighest = Jarvis.Slate2,
+
+    outline = Jarvis.Line2,
+    outlineVariant = Jarvis.Line,
+
+    error = Jarvis.Crit,
+    onError = Jarvis.Void,
+    errorContainer = Jarvis.CritDim,
+    onErrorContainer = Jarvis.Crit,
 )
 
 @Composable
 fun LocalVoiceTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = DarkColorScheme,
+        colorScheme = JarvisColorScheme,
         content = content,
     )
 }

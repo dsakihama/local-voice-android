@@ -9,6 +9,8 @@
     <!-- Foreground service for inference (keeps alive during processing) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Foreground service that keeps the floating bubble alive across apps -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- System overlay: FAB floats above all other apps -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -67,6 +69,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Floating mic bubble: always-on system overlay -->
+        <service
+            android:name=".overlay.VoiceOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="floating_dictation_overlay" />
+        </service>
 
         <!-- Accessibility Service: text injection into target apps -->
         <service

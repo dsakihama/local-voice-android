@@ -6,4 +6,10 @@
         Injects cleaned speech transcription into the focused text field of your chosen app.
         No data leaves your device.
     </string>
+
+    <!-- Floating mic bubble overlay -->
+    <string name="overlay_bubble_description">Local Voice dictation</string>
+    <string name="overlay_channel_name">Floating button</string>
+    <string name="overlay_notification_title">Local Voice</string>
+    <string name="overlay_notification_text">Tap the floating mic to dictate anywhere.</string>
 </resources>

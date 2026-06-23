@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Jarvis base surfaces — kept in sync with ui/theme/Color.kt -->
+    <color name="jarvis_void">#080C14</color>
+    <color name="jarvis_signal">#00C8FF</color>
+</resources>

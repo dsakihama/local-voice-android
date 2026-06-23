@@ -50,6 +50,8 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             val cleanedText: String,
             val intent: VoiceIntent,
             val rankedApps: Map<TargetAppRegistry.Category, List<TargetAppRegistry.TargetApp>>,
+            /** targetAppId → recency-weighted use count for this intent (0 if never used). */
+            val useCounts: Map<String, Int> = emptyMap(),
         ) : UiState
         /** Text was injected directly into the target app via accessibility. */
         data class Delivered(val appName: String) : UiState
@@ -198,6 +200,7 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
         val thirtyDaysAgo = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30)
         val ranked = repository.getRankedApps(intent.name, thirtyDaysAgo)
         val rankedIds = ranked.map { it.targetAppId }.toSet()
+        val useCounts = ranked.associate { it.targetAppId to it.useCount }
 
         val installed = TargetAppRegistry.getInstalledApps(getApplication())
 
@@ -236,7 +239,7 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
         val sorted = linkedMapOf<TargetAppRegistry.Category, List<TargetAppRegistry.TargetApp>>()
         categoryOrder.forEach { cat -> appsSorted[cat]?.let { sorted[cat] = it } }
 
-        UiState.SelectTarget(cleanedText, intent, sorted)
+        UiState.SelectTarget(cleanedText, intent, sorted, useCounts)
     }
 
     fun deliverTo(app: TargetAppRegistry.TargetApp) {

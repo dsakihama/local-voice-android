@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Floating mic orb (idle). Jarvis: a luminous signal-cyan core with a soft radial
+  glow bleeding into transparency — depth from glow, not shadow. The outer ~14dp
+  on each side is glow halo; the solid core sits inset within it.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Radial glow halo -->
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="50%"
+                android:startColor="#5500C8FF"
+                android:centerColor="#2200C8FF"
+                android:endColor="#0000C8FF"
+                android:centerX="0.5"
+                android:centerY="0.5" />
+        </shape>
+    </item>
+
+    <!-- Solid cyan core -->
+    <item
+        android:left="14dp"
+        android:top="14dp"
+        android:right="14dp"
+        android:bottom="14dp">
+        <shape android:shape="oval">
+            <solid android:color="#00C8FF" />
+        </shape>
+    </item>
+</layer-list>
