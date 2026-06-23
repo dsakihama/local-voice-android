@@ -25,22 +25,26 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 
 ## Actions / In Progress
 
-**Where things stand (2026-06-23):** Flow pivot to transcript-first + native share sheet is complete and verified on-device (FAB, waveform, Obsidian/Gmail/Messages share all confirmed). Full detail in the Done table below. The build is clean and installed on the Pixel 10 Pro XL.
-
-**⚠️ First thing next session — COMMIT.** All of the flow-pivot work is uncommitted on `main` (last commit is `ea5d1ef` Jarvis design system). Uncommitted:
-- Modified: `AndroidManifest.xml`, `TargetAppRegistry.kt`, `SttProbe.kt`, `CleanupPrompts.kt`, `MainScreen.kt`, `TranscribeViewModel.kt`, `tracker.md`
-- New: `share/ShareSheetLauncher.kt`, `ui/ListeningWave.kt`, `design/share-text-requirements.md`
-- Suggest committing on a branch (not directly on `main`).
+**Where things stand (2026-06-23):** Flow pivot to transcript-first + native share sheet is complete, verified on-device (FAB, waveform, Obsidian/Gmail/Messages share all confirmed), and **committed** as `33b0ff4` on `main`. Full detail in the Done table below. Build is clean and installed on the Pixel 10 Pro XL. (Loose end: `design/share-text-requirements.md` is still untracked — commit or ignore as desired.)
 
 **Next up (in priority order):**
-1. **Commit** the flow-pivot work (see above).
-2. **Decide the dormant accessibility path** — `UiState.SelectTarget` / `deliverTo()` / `buildSelectTarget()` / `launchApp()` in `TranscribeViewModel` and `SelectTargetSheet` in `MainScreen` are now dead code, kept only for a possible A/B vs the share sheet. Either wire up an A/B toggle or delete them. (App-usage frequency ranking + `AppUsageRecord` writes go dormant with it.)
-3. **Decide clipboard behavior** — currently copies to clipboard on *every* share, which triggers the Android 13+ system "Copied" chip. Keep always-copy, or switch to copy-on-fallback only to suppress the chip.
-4. **Remove `UiState.Result` comparison panel** — the RAW/CLEANED debug review screen is no longer on the main path; safe to delete (Phase 5 post-v1 TODO).
-5. **Phase 7: Settings & Permissions** — next major build phase (mic/accessibility/clipboard permission flows, settings screen, data dashboard). See Phase 7 list.
+1. **Decide the dormant accessibility path** — `UiState.SelectTarget` / `deliverTo()` / `buildSelectTarget()` / `launchApp()` in `TranscribeViewModel` and `SelectTargetSheet` in `MainScreen` are now dead code, kept only for a possible A/B vs the share sheet. Either wire up an A/B toggle or delete them. (App-usage frequency ranking + `AppUsageRecord` writes go dormant with it.)
+2. **Decide clipboard behavior** — currently copies to clipboard on *every* share, which triggers the Android 13+ system "Copied" chip. Keep always-copy, or switch to copy-on-fallback only to suppress the chip.
+3. **Remove `UiState.Result` comparison panel** — the RAW/CLEANED debug review screen is no longer on the main path; safe to delete (Phase 5 post-v1 TODO).
+4. **Phase 7: Settings & Permissions** — next major build phase (mic/accessibility/clipboard permission flows, settings screen, data dashboard). See Phase 7 list.
+
+**Model direction (decided 2026-06-23):** Gemma 3 1B did not meet expectations — it made things up (over-applied markdown, didn't faithfully preserve dictated words) and wasn't reliably coachable via examples. **Move cleanup to Gemma 4.** On-device Gemma 4 = **E2B / E4B** (effective ~2B / ~4B; there is no literal Gemma 4 "1B"). Target **E4B first** (safe, most faithful), then attempt to downsize to **E2B**; use the smallest variant that stays faithful + coachable. Strategy is example-driven: less free-form generation, more steering by pre-loaded few-shot "agent files" (this is the Phase 3 in-context-learning task). **NOTE: the on-device build is text-only — it does NOT replace ML Kit STT.** Full numbers in project memory.
+
+**Specific models to download (Kaggle):**
+- Kaggle model page: **`google/gemma-4`** (kaggle.com/models/google/gemma-4) — official Google release; the LiteRT-LM variations are mirrored 1:1 on Hugging Face under `litert-community`.
+- **Primary → E4B:** variation `gemma-4-E4B-it-litert-lm` → file **`gemma-4-E4B-it.litertlm`** (HF mirror: `litert-community/gemma-4-E4B-it-litert-lm`). ~3.66 GB.
+- **Downsize/fallback → E2B:** variation `gemma-4-E2B-it-litert-lm` → file **`gemma-4-E2B-it.litertlm`** (HF mirror: `litert-community/gemma-4-E2B-it-litert-lm`). ~1.5 GB.
+- Want the **`-it`** (instruction-tuned) variants. Skip the `-web.task` files — those are for browser/WebGPU, not Android.
+
+**⚠️ Format/runtime change — NOT a drop-in swap:** Gemma 4 ships as **`.litertlm`** (new LiteRT-LM format), not the **`.task`** format `MediaPipeLlmCleanup.kt` loads today via `tasks-genai:0.10.35`. MediaPipe LLM Inference is now in **maintenance mode**; Gemma 4 on-device is meant to run on the **LiteRT-LM** runtime (adds KV-cache mgmt, prompt templating, function calling on top of LiteRT). So Phase 3 likely means **migrating the runtime from MediaPipe `tasks-genai` → LiteRT-LM**, not just pushing a new model file. Confirm whether the installed `tasks-genai` can load `.litertlm` before assuming a clean swap; budget for the runtime migration if not.
 
 **Deferred — do not pick up without the trigger:**
-- **Notes markdown structuring** → blocked on Gemma 3 4B model availability on Kaggle. Notes is programmatic-only for now (1B over-applied checkboxes).
+- **Notes markdown structuring** → was blocked on Gemma 3 4B; now folded into the Gemma 4 migration. Notes stays programmatic-only until Gemma 4 cleanup proves faithful (1B over-applied checkboxes).
 - **AICore not-ready first-run UI** → deferred; self-managing STT model is `AVAILABLE` on this device, no crash path. See annotated note in Phase 6.
 
 ---
@@ -86,12 +90,15 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 - [x] **Model: Gemma 3 1B int4** (`gemma3-1B-it-int4.task`) — selected; ~1100ms cleanup latency, no repetition, acceptable output quality
 - [x] **Commit all phase 2.2 changes** (6 modified files + `MediaPipeLlmCleanup.kt`)
 
-**Phase 3: LLM & Cleanup Refinement** ⏸ Deferred — blocked on model availability
+**Phase 3: LLM & Cleanup Refinement** ▶ Active focus — migrate to Gemma 4
 - Text / Email / Notes now use fast programmatic cleanup (capitalize + strip fillers); LLM reserved for AI Prompt only
-- Notes moved off the 1B LLM (2026-06-23) — model over-applied markdown (turned plain dictation into checkboxes). NOTES markdown prompt kept in `CleanupPrompts.kt`; rewire to LLM once Gemma 3 4B lands.
-- Unblocked by: Gemma 3 4B LiteRT release on Kaggle (not yet available as of 2026-06-20)
-- [ ] Prompt refinement loop — tune `CleanupPrompts.kt` across all intents once 4B model is available
-- [ ] Implement in-context learning: retrieve training pairs from Room, inject as few-shot examples into prompt
+- Notes moved off the 1B LLM (2026-06-23) — model over-applied markdown (turned plain dictation into checkboxes). NOTES markdown prompt kept in `CleanupPrompts.kt`; rewire to LLM once Gemma 4 cleanup is faithful.
+- **No longer blocked on Kaggle** — Gemma 4 E4B LiteRT (`litert-community/gemma-4-E4B-it-litert-lm`) already exists. See model-direction note above.
+- [ ] **Migrate to Gemma 4 E4B-it** — download `gemma-4-E4B-it.litertlm` from Kaggle `google/gemma-4` (or HF `litert-community/gemma-4-E4B-it-litert-lm`). First confirm whether `tasks-genai:0.10.35` loads `.litertlm`; if not, migrate `MediaPipeLlmCleanup.kt` runtime from MediaPipe → **LiteRT-LM**. Set GPU backend + speculative decoding, measure latency/thermals on Pixel 10 Pro XL (Tensor G5).
+- [ ] **Re-test faithfulness** across all intents (esp. Notes markdown + word preservation) — the original 1B failure mode
+- [ ] **Attempt downsize E4B → E2B** once E4B proves the flow; keep whichever stays faithful, hold the other as fallback
+- [ ] Prompt refinement loop — tune `CleanupPrompts.kt` across all intents on the new model
+- [ ] Implement in-context learning ("agent files"): retrieve training pairs from Room, inject as few-shot examples into prompt — primary coachability lever
 - [ ] Implement graceful degradation if model file missing (surface clear error, do not silently fail)
 - [ ] Evaluate CPU vs GPU backend latency (set `setPreferredBackend` in `LlmInferenceOptions`)
 - [ ] In-app model download flow (replace ADB push with bundled or downloadable model)
@@ -117,7 +124,7 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 - [x] Package visibility declared in manifest (`<queries>` block — Android 11+ requirement)
 - [x] Category order respects intent (Text → Comms first, Notes → PKB first, etc.)
 - [x] Injection confirmed working end-to-end; messaging apps (Messages, WhatsApp) use clipboard fallback as designed
-- [ ] TODO (post-v1): Remove `UiState.Result` comparison panel once model quality is stable enough to skip review step
+- [ ] TODO (post-v1): Remove `UiState.Result` comparison panel once model quality is stable enough to skip review step (keep it through the Gemma 4 faithfulness re-test — it's the RAW/CLEANED diff view)
 
 **Phase 6: UI**
 - [x] Flow reordered to transcript-first: record → STT → review transcript → pick intent → cleanup → share
@@ -139,8 +146,8 @@ Replaced ONNX Runtime + Whisper Small int8 + Phi-2 int4 with ML Kit GenAI STT + 
 - [ ] AICore dependency note in app (Pixel 10 required for Advanced STT; Basic mode fallback if scope expands)
 
 **Future Investigations (post-Phase 8)**
-- [ ] Evaluate Gemma 3 4B int4 (`.task` format, Kaggle) if 1B quality is insufficient after prompt tuning — ~2.5 GB, expect 5–15s inference vs ~1100ms; try GPU variant first (Tensor G4 via OpenCL/Vulkan)
-- [ ] Evaluate Gemma 4 4B — check for LiteRT/MediaPipe-compatible `.task` format on Kaggle; compare cleanup quality and latency against Gemma 3 4B int4
+- [x] ~~Evaluate Gemma 3 4B int4~~ / ~~Gemma 4 4B availability~~ — superseded: Gemma 4 E4B is now the active Phase 3 plan (see above). Gemma 4 on-device = E2B/E4B only.
+- [ ] If E4B latency/thermals are unacceptable on Tensor G5 even on GPU, fall back to E2B; if both fail the bar, reconsider keeping AI-Prompt cleanup programmatic too.
 
 **Phase 8: Testing & Polish**
 - [ ] End-to-end test on Pixel 10 Pro XL
