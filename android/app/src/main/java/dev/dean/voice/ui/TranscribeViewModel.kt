@@ -14,7 +14,9 @@ import dev.dean.voice.apps.TargetAppRegistry
 import dev.dean.voice.audio.SttProbe
 import dev.dean.voice.data.db.entities.AppUsageRecord
 import dev.dean.voice.data.db.entities.Transcription
+import dev.dean.voice.data.settings.AppSettingsRepository
 import dev.dean.voice.intent.VoiceIntent
+import dev.dean.voice.model.CleanupModel
 import dev.dean.voice.model.LlmCleanup
 import dev.dean.voice.service.VoiceAccessibilityService
 import dev.dean.voice.share.ShareSheetLauncher
@@ -22,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
@@ -30,6 +33,7 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
     private val probe = SttProbe(app)
     private val cleanup = LlmCleanup(app)
     private val repository = (app as VoiceApp).repository
+    private val settings = AppSettingsRepository(app)
 
     sealed interface UiState {
         data object Idle : UiState
@@ -69,6 +73,10 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
     private val _intent = MutableStateFlow(VoiceIntent.AI_PROMPT)
     val intent: StateFlow<VoiceIntent> = _intent
 
+    /** Active cleanup model, for the Settings model toggle. */
+    private val _cleanupModel = MutableStateFlow(CleanupModel.E2B)
+    val cleanupModel: StateFlow<CleanupModel> = _cleanupModel
+
     private var recordJob: Job? = null
     private val finalSegments = mutableListOf<String>()
     private var lastPartial: String = ""
@@ -77,9 +85,24 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
         _intent.value = intent
     }
 
-    /** Call once on screen entry — warms up the inference engine while the user reads the UI. */
+    /** Call once on screen entry — loads the persisted model and warms up the engine. */
     fun warmupPromptModel() {
-        viewModelScope.launch { cleanup.warmup() }
+        viewModelScope.launch {
+            val model = runCatching { CleanupModel.valueOf(settings.cleanupModel.first()) }
+                .getOrDefault(CleanupModel.E2B)
+            _cleanupModel.value = model
+            cleanup.useModel(model)
+        }
+    }
+
+    /** Switches the cleanup model (Settings toggle) — persists the choice and reloads the engine. */
+    fun selectModel(model: CleanupModel) {
+        if (model == _cleanupModel.value) return
+        _cleanupModel.value = model
+        viewModelScope.launch {
+            settings.setCleanupModel(model.name)
+            cleanup.useModel(model)
+        }
     }
 
     fun startRecording() {

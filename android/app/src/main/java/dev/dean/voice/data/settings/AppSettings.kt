@@ -29,6 +29,7 @@ class AppSettingsRepository(private val context: Context) {
         val ENABLE_ACCESSIBILITY  = booleanPreferencesKey("enable_accessibility")
         val ENABLE_IN_CONTEXT     = booleanPreferencesKey("enable_in_context_learning")
         val ENABLE_LOCAL_ANALYTICS = booleanPreferencesKey("enable_local_analytics")
+        val CLEANUP_MODEL         = stringPreferencesKey("cleanup_model")
     }
 
     // ── Defaults ────────────────────────────────────────────────────
@@ -57,6 +58,11 @@ class AppSettingsRepository(private val context: Context) {
         it[Keys.ENABLE_LOCAL_ANALYTICS] ?: false
     }
 
+    /** Active cleanup model, stored as the CleanupModel enum name. Default: E2B. */
+    val cleanupModel: Flow<String> = context.dataStore.data.map {
+        it[Keys.CLEANUP_MODEL] ?: "E2B"
+    }
+
     // ── Writers ────────────────────────────────────────────────────
 
     suspend fun setAutoStopSilenceMs(ms: Int) = context.dataStore.edit {
@@ -81,5 +87,9 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setLocalAnalyticsEnabled(enabled: Boolean) = context.dataStore.edit {
         it[Keys.ENABLE_LOCAL_ANALYTICS] = enabled
+    }
+
+    suspend fun setCleanupModel(name: String) = context.dataStore.edit {
+        it[Keys.CLEANUP_MODEL] = name
     }
 }

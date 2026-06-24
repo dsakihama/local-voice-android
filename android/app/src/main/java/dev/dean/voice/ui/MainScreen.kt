@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.dean.voice.apps.TargetAppRegistry
 import dev.dean.voice.intent.VoiceIntent
+import dev.dean.voice.model.CleanupModel
 import dev.dean.voice.overlay.VoiceOverlayService
 import dev.dean.voice.ui.theme.Jarvis
 import kotlinx.coroutines.delay
@@ -79,6 +82,7 @@ fun MainScreen(
 ) {
     val state by vm.state.collectAsState()
     val selectedIntent by vm.intent.collectAsState()
+    val cleanupModel by vm.cleanupModel.collectAsState()
 
     // Elapsed-time ticker for the REC indicator while listening.
     val listening = state is TranscribeViewModel.UiState.Recording ||
@@ -154,7 +158,7 @@ fun MainScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(8.dp))
-            AppHeader()
+            AppHeader(currentModel = cleanupModel, onSelectModel = vm::selectModel)
             Spacer(Modifier.height(48.dp))
 
             when (val s = state) {
@@ -276,7 +280,10 @@ fun MainScreen(
 // ── Header ───────────────────────────────────────────────────────────────────
 
 @Composable
-private fun AppHeader() {
+private fun AppHeader(
+    currentModel: CleanupModel,
+    onSelectModel: (CleanupModel) -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -299,8 +306,22 @@ private fun AppHeader() {
                 color = Jarvis.Frost,
             )
         }
-        IconButton(onClick = { /* TODO Phase 7: settings */ }) {
-            Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Jarvis.Mist)
+        Box {
+            var menuOpen by remember { mutableStateOf(false) }
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(Icons.Filled.Settings, contentDescription = "Cleanup model", tint = Jarvis.Mist)
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                CleanupModel.entries.forEach { model ->
+                    DropdownMenuItem(
+                        text = { Text(if (model == currentModel) "✓  ${model.label}" else "     ${model.label}") },
+                        onClick = {
+                            onSelectModel(model)
+                            menuOpen = false
+                        },
+                    )
+                }
+            }
         }
     }
 }
