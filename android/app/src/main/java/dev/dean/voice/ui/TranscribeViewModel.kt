@@ -15,7 +15,7 @@ import dev.dean.voice.audio.SttProbe
 import dev.dean.voice.data.db.entities.AppUsageRecord
 import dev.dean.voice.data.db.entities.Transcription
 import dev.dean.voice.intent.VoiceIntent
-import dev.dean.voice.model.MediaPipeLlmCleanup
+import dev.dean.voice.model.LlmCleanup
 import dev.dean.voice.service.VoiceAccessibilityService
 import dev.dean.voice.share.ShareSheetLauncher
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit
 class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val probe = SttProbe(app)
-    private val cleanup = MediaPipeLlmCleanup(app)
+    private val cleanup = LlmCleanup(app)
     private val repository = (app as VoiceApp).repository
 
     sealed interface UiState {
@@ -164,11 +164,11 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
                 // flow still works — graceful degradation, no error wall.
                 if (cleanup.isModelReady()) {
                     when (val result = cleanup.clean(selectedIntent, rawText)) {
-                        is MediaPipeLlmCleanup.Result.Success -> {
+                        is LlmCleanup.Result.Success -> {
                             persistTranscription(result.rawText, result.cleanedText, selectedIntent, result.latencyMs)
                             shareCleaned(result.cleanedText, selectedIntent)
                         }
-                        is MediaPipeLlmCleanup.Result.Error -> _state.value = UiState.Error(
+                        is LlmCleanup.Result.Error -> _state.value = UiState.Error(
                             "Cleanup failed: ${result.message}\n\nRaw STT: $rawText"
                         )
                     }
