@@ -1,9 +1,11 @@
 package dev.dean.voice.audio
 
 import android.Manifest
+import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.PowerManager
 import androidx.annotation.RequiresPermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -15,13 +17,14 @@ import kotlin.math.sqrt
  * Captures 16kHz mono PCM — exactly what Whisper's feature extractor expects.
  *
  * Usage:
- *   val recorder = AudioRecorder()
+ *   val recorder = AudioRecorder(context)
  *   recorder.startRecording().collect { chunk -> /* PCM chunk arrived */ }
  *   // Flow completes automatically on silence or max duration.
  *   // To stop manually: recorder.stopRecording() then cancel the collection job.
  *   val fullPcm = recorder.getRecordedAudio()
  */
 class AudioRecorder(
+    private val context: Context,
     private val silenceThresholdMs: Int = 2_000,
     private val maxDurationSec: Int = 60,
 ) {
@@ -32,6 +35,8 @@ class AudioRecorder(
 
         // RMS below this is considered silence. Tune empirically on device.
         private const val SILENCE_RMS_THRESHOLD = 300
+
+        private const val WAKE_LOCK_TAG = "dev.dean.voice:recording"
     }
 
     @Volatile private var isRecording = false
@@ -57,6 +62,13 @@ class AudioRecorder(
         check(recorder.state == AudioRecord.STATE_INITIALIZED) {
             "AudioRecord failed to initialize — check RECORD_AUDIO permission."
         }
+
+        // Acquire a partial wake lock so the CPU stays alive for the full recording window.
+        // The timeout is maxDurationSec + 30 s — it auto-releases as a battery safeguard in
+        // case the finally block is somehow never reached (e.g. process kill).
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+        wakeLock.acquire((maxDurationSec + 30) * 1_000L)
 
         audioRecord = recorder
         synchronized(chunks) { chunks.clear() }
@@ -99,6 +111,7 @@ class AudioRecorder(
             recorder.release()
             audioRecord = null
             isRecording = false
+            if (wakeLock.isHeld) wakeLock.release()
         }
     }.flowOn(Dispatchers.IO)
 

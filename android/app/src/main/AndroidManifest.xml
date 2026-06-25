@@ -24,6 +24,9 @@
     <!-- Vibration for haptic feedback on FAB tap -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Keep CPU alive during recording; screen may still turn off (PARTIAL_WAKE_LOCK) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!-- ── Package visibility (Android 11+) ─────────────────────────── -->
     <!-- Required to query installed packages via PackageManager.getPackageInfo() -->
     <queries>
