@@ -214,7 +214,7 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
      * prepended so the timestamp lands as the note title when pasted into Obsidian.
      */
     private fun shareCleaned(cleanedText: String, intent: VoiceIntent) {
-        val delivered = if (intent == VoiceIntent.NOTES) prependTimestamp(cleanedText) else cleanedText
+        val delivered = if (intent == VoiceIntent.NOTES) formatNoteOutput(cleanedText) else cleanedText
         val context: Context = getApplication()
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("voice", delivered))
@@ -223,11 +223,28 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = UiState.Idle
     }
 
-    /** "# 2026-06-23 2.45 PM\n\n…" — filename-safe (no colon/slash) for the Obsidian title. */
-    private fun prependTimestamp(text: String): String {
+    /**
+     * Shapes the final note text before clipboard/share:
+     *
+     * - If the LLM extracted a user-specified title ("use this as a title …"), the cleaned text
+     *   starts with a "# Heading" line. In that case the title stays as-is, and the timestamp
+     *   becomes the first line of the body, right below the title.
+     *
+     * - Otherwise the timestamp becomes the top-level heading, matching the current behaviour.
+     *
+     * Format with title:    "# User Title\n<timestamp>\n\n<body>"
+     * Format without title: "# <timestamp>\n\n<body>"   (filename-safe: no colon/slash)
+     */
+    private fun formatNoteOutput(text: String): String {
         val ts = java.time.LocalDateTime.now()
             .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd h.mm a"))
-        return "# $ts\n\n$text"
+        val firstLine = text.lineSequence().firstOrNull()?.trim().orEmpty()
+        return if (firstLine.startsWith("#")) {
+            val body = text.lines().drop(1).dropWhile { it.isBlank() }.joinToString("\n")
+            "${firstLine}\n${ts}\n\n${body}"
+        } else {
+            "# $ts\n\n$text"
+        }
     }
 
     private fun persistTranscription(raw: String, cleaned: String, intent: VoiceIntent, latencyMs: Long) {
