@@ -95,14 +95,22 @@ class SttProbe(private val context: Context) {
                 }
                 is SpeechRecognizerResponse.ErrorResponse -> {
                     val msg = response.e.message ?: "Recognition error"
-                    if (isCancellation(msg)) {
-                        // Benign — the recognizer reports CANCELLED whenever we stop the
-                        // session ourselves (stopRecognition/close). Not a user-facing error;
-                        // the stop handler has already captured the transcript.
-                        Log.i(TAG, "Recognition cancelled (expected on stop): $msg")
-                    } else {
-                        Log.e(TAG, "Error: ${response.e}")
-                        onEvent(Event.Err(msg))
+                    when {
+                        isCancellation(msg) -> {
+                            // Benign — the recognizer reports CANCELLED whenever we stop the
+                            // session ourselves (stopRecognition/close). Not a user-facing error;
+                            // the stop handler has already captured the transcript.
+                            Log.i(TAG, "Recognition cancelled (expected on stop): $msg")
+                        }
+                        isRuntimeLimitsError(msg) -> {
+                            // AICore throttled on-device AI budget — transient, not a crash.
+                            Log.w(TAG, "AICore runtime limits hit: $msg")
+                            onEvent(Event.Err("AICore is temporarily throttled. Wait a moment and try again."))
+                        }
+                        else -> {
+                            Log.e(TAG, "Error: ${response.e}")
+                            onEvent(Event.Err(msg))
+                        }
                     }
                 }
             }
@@ -113,6 +121,10 @@ class SttProbe(private val context: Context) {
     private fun isCancellation(message: String): Boolean =
         message.contains("CANCELLED", ignoreCase = true) ||
             message.contains("completed exceptionally", ignoreCase = true)
+
+    /** AICore exceeded its on-device runtime budget — transient throttle, not a crash. */
+    private fun isRuntimeLimitsError(message: String): Boolean =
+        message.contains("AICORE_NOT_ENABLED_RUNTIME_LIMITS", ignoreCase = true)
 
     suspend fun stop() {
         recognizer.stopRecognition()
