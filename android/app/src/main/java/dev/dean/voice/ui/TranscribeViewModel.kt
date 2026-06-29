@@ -240,12 +240,19 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd h.mm a"))
         val firstLine = text.lineSequence().firstOrNull()?.trim().orEmpty()
         return if (firstLine.startsWith("#")) {
+            val title = sanitizeNoteTitle(firstLine.removePrefix("#").trim())
             val body = text.lines().drop(1).dropWhile { it.isBlank() }.joinToString("\n")
-            "${firstLine}\n${ts}\n\n${body}"
+            "# $title\n$ts\n\n$body"
         } else {
             "# $ts\n\n$text"
         }
     }
+
+    /** Strips characters that are unsafe in note filenames (Obsidian, filesystem). */
+    private fun sanitizeNoteTitle(raw: String): String =
+        raw.replace(Regex("""[/\\:*?"<>|#&@%^{}\[\]]"""), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
 
     private fun persistTranscription(raw: String, cleaned: String, intent: VoiceIntent, latencyMs: Long) {
         viewModelScope.launch(Dispatchers.IO) {
