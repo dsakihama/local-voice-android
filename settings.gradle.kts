@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "LocalVoice"
 include(":app")
+project(":app").projectDir = file("android/app")

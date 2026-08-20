@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.mlkit.genai.common.FeatureStatus
 import dev.dean.voice.VoiceApp
 import dev.dean.voice.apps.TargetAppRegistry
+import dev.dean.voice.audio.PromptApiProbe
 import dev.dean.voice.audio.SttProbe
 import dev.dean.voice.data.db.entities.AppUsageRecord
 import dev.dean.voice.data.db.entities.Transcription
@@ -31,6 +32,7 @@ import java.util.concurrent.TimeUnit
 class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val probe = SttProbe(app)
+    private val promptApiProbe = PromptApiProbe()
     private val cleanup = LlmCleanup(app)
     private val repository = (app as VoiceApp).repository
     private val settings = AppSettingsRepository(app)
@@ -103,6 +105,10 @@ class TranscribeViewModel(app: Application) : AndroidViewModel(app) {
             settings.setCleanupModel(model.name)
             cleanup.useModel(model)
         }
+    }
+
+    fun runPromptApiProbe() {
+        viewModelScope.launch { promptApiProbe.runProbe() }
     }
 
     fun startRecording() {

@@ -66,6 +66,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.dean.voice.BuildConfig
 import dev.dean.voice.apps.TargetAppRegistry
 import dev.dean.voice.intent.VoiceIntent
 import dev.dean.voice.model.CleanupModel
@@ -158,7 +159,11 @@ fun MainScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(8.dp))
-            AppHeader(currentModel = cleanupModel, onSelectModel = vm::selectModel)
+            AppHeader(
+                currentModel = cleanupModel,
+                onSelectModel = vm::selectModel,
+                onProbePromptApi = vm::runPromptApiProbe,
+            )
             Spacer(Modifier.height(48.dp))
 
             when (val s = state) {
@@ -283,6 +288,7 @@ fun MainScreen(
 private fun AppHeader(
     currentModel: CleanupModel,
     onSelectModel: (CleanupModel) -> Unit,
+    onProbePromptApi: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -318,6 +324,16 @@ private fun AppHeader(
                         onClick = {
                             onSelectModel(model)
                             menuOpen = false
+                        },
+                    )
+                }
+                if (BuildConfig.DEBUG) {
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Probe Prompt API") },
+                        onClick = {
+                            menuOpen = false
+                            onProbePromptApi()
                         },
                     )
                 }

@@ -48,6 +48,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -97,6 +98,8 @@ dependencies {
 
     // ML Kit GenAI Speech Recognition — Advanced mode (Gemini Nano via AICore)
     implementation(libs.mlkit.genai.speech)
+    // ML Kit GenAI Prompt API — temporary probe only (PromptApiProbe.kt); remove once R1 is resolved
+    implementation(libs.mlkit.genai.prompt)
     // LiteRT-LM — on-device text cleanup via Gemma 4 E4B (.litertlm)
     implementation(libs.litert.lm)
 
