@@ -1,17 +1,23 @@
 # ── Android build outputs ────────────────────────────────────────────
-android/.gradle/
-android/.kotlin/
+# Gradle root was flattened from android/ to the project root — cover both.
+.gradle/
+.kotlin/
+build/
 android/build/
 android/app/build/
+local.properties
 android/local.properties
-android/*.iml
+*.iml
 
 # ── Android Studio / IntelliJ ────────────────────────────────────────
 .idea/
-*.iml
 .DS_Store
 
 # ── Gradle wrapper (keep gradlew + wrapper jar, ignore caches) ───────
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!gradlew
+!gradlew.bat
 !android/gradle/wrapper/gradle-wrapper.jar
 !android/gradle/wrapper/gradle-wrapper.properties
 !android/gradlew
@@ -41,3 +47,6 @@ Thumbs.db
 *.keystore
 *.jks
 google-services.json
+
+# ── Claude Code local settings (personal, machine-specific) ──────────
+.claude/settings.local.json
