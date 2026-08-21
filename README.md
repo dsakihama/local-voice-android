@@ -51,7 +51,21 @@ cd local-voice
 ./gradlew installDebug
 ```
 
-The app needs microphone, accessibility (optional, for direct injection), and notification permissions on first run. AICore-backed features only function on supported Pixel hardware — see [`docs/model-and-pipeline-review-2026-07-05.md`](docs/model-and-pipeline-review-2026-07-05.md) for the current known-issues list.
+This builds and installs the app, but cleanup won't run yet — **model weights aren't in this repo** (see below). The app needs microphone, accessibility (optional, for direct injection), and notification permissions on first run. AICore-backed features only function on supported Pixel hardware — see [`docs/model-and-pipeline-review-2026-07-05.md`](docs/model-and-pipeline-review-2026-07-05.md) for the current known-issues list.
+
+### Getting the cleanup model onto a device
+
+The Gemma 4 `.litertlm` weights (E2B ~2.6GB, E4B ~3.7GB) aren't bundled in the repo, the APK, or downloaded at runtime — they're pulled and staged onto the device by hand:
+
+1. Download the `-it` (instruction-tuned) `.litertlm` file(s) from [HF `litert-community`](https://huggingface.co/litert-community) — `gemma-4-E4B-it-litert-lm` and/or `gemma-4-E2B-it-litert-lm`. Skip any `-web.litertlm` files (browser/WebGPU only).
+2. Push to the device and move into the app's private storage:
+   ```bash
+   adb push gemma-4-E4B-it.litertlm /data/local/tmp/
+   adb shell run-as dev.dean.voice cp /data/local/tmp/gemma-4-E4B-it.litertlm /data/data/dev.dean.voice/files/
+   ```
+3. Both E2B and E4B can be present on-device at once — the in-app model toggle switches between them without a rebuild.
+
+`LlmCleanup.kt` prints this exact sequence in its error message if it can't find the model file, so a missing model fails loud rather than silently.
 
 ## License
 
