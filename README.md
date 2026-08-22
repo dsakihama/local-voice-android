@@ -21,6 +21,17 @@ structures notes, stays faithful to what was actually said
 
 Every session is persisted locally (Room) so cleanup quality can be tuned over time — the intent behind the `training_pairs` table is to feed the model corrected examples of its own past cleanups (few-shot steering) rather than relying on free-form generation alone.
 
+## What's verified
+
+All testing below is on a **Pixel 10 Pro XL, Tensor G5**, unless noted. Dates mark when each was verified.
+
+- **2026-06-19 — Speech-to-text.** ML Kit GenAI Speech Recognition (Advanced mode) confirmed on-device: AICore/Gemini Nano available, streaming partials work, silence detection is handled natively by the recognizer. Beat the Whisper-ONNX CPU baseline it replaced (1752ms) on latency. **Not yet verified:** a Basic-mode fallback for non-Pixel-10 hardware — this build targets Advanced mode only.
+- **2026-06-20 — Local persistence.** Every completed session (both LLM and programmatic cleanup paths) writes a `Transcription` row to Room — confirmed by pulling the SQLite DB via `adb` and inspecting rows directly, not just trusting that the write call returned.
+- **2026-06-22 — Delivery paths.** Accessibility-service text injection, clipboard fallback, installed-app detection, and the frequency-ranked app menu all confirmed working on-device. Messaging apps (Messages, WhatsApp) route through the clipboard by design — direct injection into their input fields isn't reliable.
+- **2026-06-23 — End-to-end share flow.** Full path (record → transcript → intent → cleanup → share) verified: Obsidian, Gmail (text lands in the body, cursor left on the recipient field), and Messages all confirmed via the native share sheet.
+- **2026-06-23 — Cleanup faithfulness.** Gemma 4 E2B on LiteRT-LM/CPU passed a faithfulness re-test: cleans filler words without fabricating content, keeps Notes as plain prose. This directly fixes the failure mode that ruled out Gemma 3 1B, which invented markdown structure (turned dictation into checkboxes) nobody asked for. **Not yet verified:** few-shot/agent-file steering — the plumbing to inject examples exists (`CleanupPrompts.buildParts()`) but nothing feeds it examples yet.
+- **2026-06-23 — GPU is not viable on this hardware.** `Backend.GPU()` fails engine creation for both E2B and E4B on the Tensor G5 (`LiteRtLmJniException`, `llm_litert_compiled_model_executor.cc:1951`) — the bundled OpenCL accelerator can't compile Gemma 4 here. Cleanup runs on CPU/XNNPack instead; a Tensor-G5-specific E2B build exists but isn't runnable without a dispatch lib absent from the public AAR. **Not yet resolved:** watching for a working GPU/NPU path in a future `litertlm-android` release.
+
 ## Design decision worth calling out
 
 The project didn't start on this stack. It began with ONNX Runtime + Whisper (STT) + Phi-2 (cleanup) run through a custom conversion pipeline — see [`python/`](python) for the conversion scripts and [`design/Requirements/pivot20260619.md`](design/Requirements/pivot20260619.md) for the full writeup. That approach worked but was slow (2–8 tok/sec on NNAPI) and heavy to maintain. It was replaced with Android's ML Kit GenAI APIs and on-device Gemma, which run on dedicated silicon instead of a generic NN accelerator path — ~940 tok/sec prefill on the same device. The cleanup model itself has also moved twice since (Gemma 3 1B → Gemma 4 E2B/E4B) after the smaller model proved unfaithful to the source transcript; `tracker.md` has the running log of what was tried and why each call was made.
